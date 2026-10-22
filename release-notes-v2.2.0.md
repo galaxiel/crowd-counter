@@ -19,7 +19,7 @@
 
 ## Verify the download
 
-sha256: `SHA256_A_COMPLETER`
+sha256: `ee5129257c6ca28a4629ff55ba0f41c6febcd462bf5573e5b9b8a11fb6140831`
 
 ## Known limitations
 
