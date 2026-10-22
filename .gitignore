@@ -7,6 +7,13 @@ venv/
 # précaution quand on n'en a plus besoin.
 venv-temp/
 
+# Environnement de BUILD (procédure docs/BUILDING.md) : regénérable aussi.
+build-env/
+
+# `uv.exe` : binaire récupéré pour le build (le spec le cherche à la racine
+# ou dans le PATH). Jamais versionné — c'est un outil, pas du code du projet.
+uv.exe
+
 # Modèles : trop lourds pour git (50 Mo)
 *.pt
 *.onnx
