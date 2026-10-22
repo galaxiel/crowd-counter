@@ -183,10 +183,15 @@ class Detecteur:
     def __init__(self, modele, config: Config, half: bool = False) -> None:
         self.modele = modele
         self.config = config
-        # Demi-précision (FP16) : divise la bande passante mémoire du GPU par
-        # deux sur l'inférence, sans effet mesurable sur la qualité des
-        # boîtes à ce seuil. À n'activer QUE sur CUDA — sur CPU, la valeur
-        # est ignorée par ce drapeau mais resterait plus lente.
+        # Demi-précision (FP16), DÉSACTIVÉE par défaut — décision MESURÉE le
+        # 22/10/2026 sur la référence (3000 frames, imgsz 640, RTX 4070 SUPER) :
+        #   - décalage du décompte : 259 → 257 (bande 250/250) et 257 → 255
+        #     (bande 200/100) ;
+        #   - aucun gain de vitesse : 44 s (FP32) contre 47 s (FP16) en lot de
+        #     4, 117 s contre 106 s en lot de 1 — écarts dans le bruit.
+        # Un changement de résultat sans gain de vitesse ne se justifie pas.
+        # Le paramètre reste exposé pour expérimenter sur une machine où la
+        # bande passante GPU serait réellement le goulot.
         self._half = bool(half)
 
     def detecter(

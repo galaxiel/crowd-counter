@@ -989,10 +989,6 @@ class FenetrePrincipale(QMainWindow):
                 self.detecteur = Detecteur(
                     charger_modele(self.config.modele, self.config.peripherique),
                     self.config,
-                    # Demi-précision uniquement sur un GPU réel : sur CPU, la
-                    # valeur ne servirait à rien et sur les faux modèles des
-                    # tests elle changerait la forme de l'appel.
-                    half=peripherique_effectif(self.config.peripherique).cuda,
                 )
                 self._modele_charge = self.config.modele
             if self.tracker is None:

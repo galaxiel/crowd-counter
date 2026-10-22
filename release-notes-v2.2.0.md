@@ -4,7 +4,7 @@
 
 ## What's new in 2.2.0
 
-- **Faster analysis.** The detector now processes images in batches (4 at a time) instead of one by one, and inference runs in half precision (FP16) on NVIDIA GPUs. The counting is strictly frame-by-frame and unchanged — only the detection calls are grouped.
+- **Faster analysis.** The detector now processes images in batches (4 at a time) instead of one by one. Measured on the reference 3000-frame video: **~45 s with batching versus ~115 s without**, with the same count (verified frame by frame). The counting itself is strictly frame-by-frame and unchanged — only the detection calls are grouped.
 - **Progress bar.** A bar under the video shows how far the analysis has gone: frames done / total, with percentage. If the video container does not declare its frame count, the bar shows a busy indicator instead of a false percentage.
 - **Lighter preview rendering.** The annotated view no longer pays full-frame conversions on every displayed frame; the preview refreshes at ~15 fps while the analysis itself keeps running at full speed.
 - **Count flash fixed on fast scenes.** The red flash around the video now also triggers when a count happens between two displayed frames — previously it could be missed entirely.
