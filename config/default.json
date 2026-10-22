@@ -1,5 +1,5 @@
 {
-  "modele": "medium.pt",
+  "modele": "tetes-medium.pt",
   "seuil_confiance": 0.25,
   "taille_min_px": 3,
   "classes_retenues": null,

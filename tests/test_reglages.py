@@ -307,32 +307,34 @@ def test_signal_emis_quand_la_config_change(application):
 
 
 def test_lister_modeles_trouve_les_fichiers_presents(tmp_path):
-    (tmp_path / "medium.pt").write_bytes(b"")
+    # Nom VOLONTAIREMENT différent du repli : avec « tetes-medium.pt » ici,
+    # le test passerait même si le balayage du dossier ne trouvait rien.
+    (tmp_path / "mon-modele.pt").write_bytes(b"")
     (tmp_path / "notes.txt").write_text("ignoré", encoding="utf-8")
-    assert lister_modeles([tmp_path]) == ["medium.pt"]
+    assert lister_modeles([tmp_path]) == ["mon-modele.pt"]
 
 
 def test_lister_modeles_dossier_vide_ne_crashe_pas(tmp_path):
     """Aucun .pt sur le disque : on renvoie la liste de repli, sans exception."""
-    assert lister_modeles([tmp_path]) == ["medium.pt"]
+    assert lister_modeles([tmp_path]) == ["tetes-medium.pt"]
 
 
 def test_lister_modeles_dossier_absent_ne_crashe_pas(tmp_path):
-    assert lister_modeles([tmp_path / "nulle_part"]) == ["medium.pt"]
+    assert lister_modeles([tmp_path / "nulle_part"]) == ["tetes-medium.pt"]
 
 
 def test_panneau_ne_crashe_pas_sans_fichier_de_modele(application, tmp_path, monkeypatch):
     """Le modèle par défaut n'est pas versionné : le panneau doit pouvoir
     s'ouvrir sur une installation fraîche, sans aucun .pt sur le disque.
 
-    Le repli proposé est `medium.pt`, le modèle de tête entraîné sur
+    Le repli proposé est `tetes-medium.pt`, le modèle de tête entraîné sur
     SCUT-HEAD, seul choix par défaut défendable (cf. .superpowers/sdd).
     """
     vide = tmp_path / "modeles"
     vide.mkdir()
     monkeypatch.chdir(tmp_path)
     p = PanneauReglages(Config(), dossiers_modeles=[vide])
-    assert p.modeles_proposes() == ["medium.pt"]
+    assert p.modeles_proposes() == ["tetes-medium.pt"]
     # La Config fournie reste la source de vérité : le panneau ne substitue
     # pas un modèle à l'utilisateur sans qu'il le demande.
     assert p.lire().modele == Config().modele

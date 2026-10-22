@@ -38,9 +38,9 @@ density estimation.
 4. **Reporting** — a summary at the end with the total, the rate, and a curve.
 
 The model only looks inside the detection band (see below), and the default
-model (`medium.pt`) is a head detector trained on SCUT-HEAD. On the reference
-video it finds 29 px heads where `yolov8n-head.pt` finds 21 px ones — 38 %
-more real crossings.
+model (`tetes-medium.pt`) is a head detector trained on SCUT-HEAD. On the
+reference video it finds 29 px heads where `tetes-medium-1280.pt` finds 21 px
+ones — 38 % more real crossings.
 
 ## Running without installing anything
 
@@ -74,12 +74,13 @@ The folder mode has a direct advantage for this software: no decompressing
 ### What must sit next to the executable
 
 ```
-dist/CompteurManifestation/
-├── CompteurManifestation.exe
-├── _internal/            <- DLLs and Python modules, don't touch
-├── medium.pt             <- default model
-├── nano.pt               <- light model (CPU or older machine)
-└── yolov8n-head.pt      <- standard Ultralytics head detector
+dist/CompteurManifestationV2/
+├── CompteurManifestationV2.exe
+├── _internal/                  <- DLLs and Python modules, don't touch
+└── modeles/                    <- the models; the app scans this folder
+    ├── tetes-medium.pt         <- default (head detector, 25.9 M params)
+    ├── tetes-nano.pt           <- light and fast (3.0 M params)
+    └── tetes-medium-1280.pt    <- head detector trained at 1280 px
 ```
 
 The weights are **not** inside the executable: they are parameters, not
@@ -270,7 +271,7 @@ on demonstration footage: banners and placards broke it, and adjacent people
 merged into a single detection. A **head** detector is far more robust there,
 because a head stays visible above a placard.
 
-That choice is why the default model is `medium.pt`, a SCUT-HEAD trained
+That choice is why the default model is `tetes-medium.pt`, a SCUT-HEAD trained
 detector.
 
 The tracker went the other way. ByteTrack was tried first and rejected: at
@@ -415,7 +416,8 @@ packages, `main.py`, tests) is released under the [MIT
 License](LICENSE) — open to everyone, all modifications, commercial use
 included. The only requirement is keeping the copyright notice.
 
-The **pre-trained models** (`medium.pt`, `yolov8n-head.pt`, …) are **not**
+The **pre-trained models** (`tetes-medium.pt`, `tetes-medium-1280.pt`, …) are
+**not**
 part of the repository and are **not** covered by the MIT license: they come
 from their own sources (Ultralytics YOLO and SCUT-HEAD) and keep their own
 licenses. They are downloaded or copied separately by the user.

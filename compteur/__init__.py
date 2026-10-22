@@ -19,6 +19,6 @@ de modèles et une future API web l'importent tous directement.
 #: Source de vérité UNIQUE : `interface/app.py` importe cette constante et ne
 #: redéfinit jamais la chaîne. Deux numéros de version dans le dépôt, c'est
 #: deux numéros de version qui divergent au premier tag.
-VERSION = "2.3.0"
+VERSION = "2.4.0"
 
 __all__ = ["VERSION", "types", "config"]

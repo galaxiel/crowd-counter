@@ -2,9 +2,9 @@
 
 Pourquoi une copie et pas un embarquement dans l'exécutable :
 
-- les poids font 50 Mo chacun (`medium.pt` : 50 Mo, `yolov8n-head.pt` :
-  50 Mo, `nano.pt` : 6 Mo) et sont **volontairement hors du dépôt**
-  (`.gitignore` : `*.pt`) ;
+- les poids font jusqu'à 50 Mo (`tetes-medium.pt` : 50 Mo,
+  `tetes-medium-1280.pt` : 50 Mo, `tetes-nano.pt` : 6 Mo) et sont
+  **volontairement hors du dépôt** (`.gitignore` : `*.pt`) ;
 - le modèle est un **paramètre**, pas une dépendance : changer de détecteur,
   en ajouter un, ou essayer un modèle entraîné localement doit se faire en
   déposant un fichier, sans reconstruire l'exécutable ;
@@ -19,7 +19,7 @@ sous-dossier `modeles/` apparaissent donc dans la liste, et se chargent.
 
 Usage :
 
-    python tools/copier_modeles.py            # medium.pt, nano.pt, yolov8n-head.pt
+    python tools/copier_modeles.py            # tetes-medium, tetes-nano, tetes-medium-1280
     python tools/copier_modeles.py --dest /tmp/ailleurs
     python tools/copier_modeles.py --propre   # ne recopie que ce qui manque
 """
@@ -48,7 +48,10 @@ BUILDS_CIBLES = (
 )
 
 #: Poids livrés avec le projet, dans l'ordre de préférence pour l'utilisateur.
-MODELES_DEFAUT = ("medium.pt", "nano.pt", "yolov8n-head.pt")
+#: Convention de nommage : `cible-poids[-précision].pt`.
+#:   - `tetes-…` : détecteur de têtes (1 classe) ;
+#:   - `personnes-et-objets-…` : détecteur générique (80 classes COCO).
+MODELES_DEFAUT = ("tetes-medium.pt", "tetes-nano.pt", "tetes-medium-1280.pt")
 
 #: Note déposée dans le dossier `modeles/` de l'installation : elle explique à
 #: l'opérateur ce que ce dossier fait, sans qu'il ait à lire le dépôt.
@@ -59,6 +62,14 @@ NOTE_DOSSIER = (
     "Ils apparaîtront dans la liste « Modèle » des réglages. Le bouton\n"
     "« Parcourir… » de ces réglages prend aussi un fichier rangé ailleurs\n"
     "sur l'ordinateur, sans le déplacer.\n"
+    "\n"
+    "Comment lire les noms fournis :\n"
+    "  tetes-…                 détecte les TÊTES (1 seule classe) — le\n"
+    "                          modèle fait pour compter des personnes.\n"
+    "  personnes-et-objets-…   détecte 80 types d'objets (personnes,\n"
+    "                          voitures, vélos…), sans spécialisation.\n"
+    "Le suffixe dit le poids, donc la vitesse : nano (léger, plus rapide),\n"
+    "small, medium (précis, plus lent). Ex. : tetes-medium.pt.\n"
     "\n"
     "Ce dossier est remplacé si tu extrais une nouvelle version du logiciel\n"
     "dans un dossier neuf. Pour un modèle personnel, préfère :\n"
@@ -73,7 +84,7 @@ SUFFIXES = (".pt", ".onnx")
 def modeles_trouves(dossier: pathlib.Path = RACINE) -> list[pathlib.Path]:
     """Poids présents à la racine du dépôt, triés par taille décroissante.
 
-    Trier par taille n'est pas cosmétique : `nano.pt` (6 Mo) est le seul
+    Trier par taille n'est pas cosmétique : `tetes-nano.pt` (6 Mo) est le seul
     modèle assez léger pour être ouvert sur une machine sans GPU rapide, et
     l'utilisateur doit le voir en premier.
     """

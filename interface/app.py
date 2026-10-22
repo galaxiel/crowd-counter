@@ -16,7 +16,7 @@ ralentirait le COMPTAGE : le décompte dépendrait de la vitesse de présentatio
 ailleurs : la dupliquer ici rouvrirait le risque d'une ligne décalée, invisible
 à l'écran et qui ne se révèle qu'en comptant faux.
 
-**3. Rien de lourd au démarrage.** CUDA est présent et `medium.pt` met plusieurs
+**3. Rien de lourd au démarrage.** CUDA est présent et `tetes-medium.pt` met plusieurs
 secondes à monter. Le modèle est chargé sur « Lancer », jamais dans
 `__init__` : la fenêtre s'ouvre immédiatement, l'opérateur trace sa ligne
 pendant que le GPU se réveille.

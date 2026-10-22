@@ -201,7 +201,7 @@ def test_changer_de_peripherique_invalide_le_detecteur(fenetre, monkeypatch):
     monkeypatch.setattr("compteur.detecteur.nom_cuda", lambda: "NVIDIA GeForce RTX 4070 SUPER")
     fenetre._maj_peripherique()
     fenetre.detecteur = object()
-    fenetre._modele_charge = "medium.pt"
+    fenetre._modele_charge = "tetes-medium.pt"
 
     fenetre.panneau.definir_peripherique(PERIPHERIQUE_CPU)
     assert fenetre.detecteur is None
@@ -211,6 +211,6 @@ def test_changer_de_peripherique_invalide_le_detecteur(fenetre, monkeypatch):
 def test_un_reglage_ordinaire_ne_recharge_pas_le_modele(fenetre):
     """Le relâchement du détecteur est réservé au périphérique et au modèle."""
     fenetre.detecteur = object()
-    fenetre._modele_charge = "medium.pt"
+    fenetre._modele_charge = "tetes-medium.pt"
     fenetre.panneau.definir_seuil(0.5)
     assert fenetre.detecteur is not None

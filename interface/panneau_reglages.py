@@ -76,11 +76,12 @@ DOSSIER_PROFILS = pathlib.Path("config") / "profils"
 
 #: Modèle proposé quand aucun `.pt` n'est présent sur le disque.
 #:
-#: `medium.pt` est un détecteur de têtes entraîné sur SCUT-HEAD. Sur la vidéo de
-#: référence il trouve des têtes de 29 px là où `yolov8n-head.pt` en trouve de
-#: 21, soit 38 % de marches réelles en plus. Les `.pt` étant absents du dépôt,
-#: ce nom est une *suggestion* : le panneau l'affiche, sans l'imposer.
-MODELE_REPLI = "medium.pt"
+#: `tetes-medium.pt` est un détecteur de têtes entraîné sur SCUT-HEAD. Sur la
+#: vidéo de référence il trouve des têtes de 29 px là où `tetes-medium-1280.pt`
+#: en trouve de 21, soit 38 % de marches réelles en plus. Les `.pt` étant
+#: absents du dépôt, ce nom est une *suggestion* : le panneau l'affiche, sans
+#: l'imposer.
+MODELE_REPLI = "tetes-medium.pt"
 
 #: Tailles d'entrée proposées. Une valeur absente de la liste est ajoutée à
 #: l'affichage plutôt que rejetée en silence.
@@ -135,17 +136,18 @@ ORIENTATION_SANS_LIGNE = ORIENTATION_VERTICALE
 #:
 #: Les chiffres, eux, restent tous : ils ne sont pas des avis, ils viennent des
 #: mesures faites sur la vidéo de référence (`D:/Bureau/manif_test.mp4`, 7399
-#: frames, medium.pt). Une valeur conseillée sans mesure derrière n'est
+#: frames, tetes-medium.pt). Une valeur conseillée sans mesure derrière n'est
 #: qu'une opinion déguisée en réglage par défaut.
 AIDE: dict[str, str] = {
     "modele": (
         "Modèle de détection (.pt).\n"
-        "Ce que ça fait : cherche des têtes dans l'image — seul réglage qui "
-        "change ce qui est vu.\n"
+        "Ce que ça fait : cherche des têtes — famille « tetes-… ». Les "
+        "modèles « personnes-et-objets-… » détectent 80 types d'objets, dont "
+        "les personnes.\n"
         "Ce que ça change : plus lent = meilleures petites têtes, donc plus "
         "de personnes, analyse plus longue.\n"
-        "Valeur conseillée : medium.pt — 29 px contre 21 pour "
-        "yolov8n-head.pt, 38 % de marches en plus.\n"
+        "Valeur conseillée : tetes-medium.pt — 29 px contre 21 pour "
+        "tetes-medium-1280.pt, 38 % de marches en plus.\n"
         "Où le ranger : « modeles/ » à côté du logiciel, ou « Parcourir… » "
         "pour un fichier resté ailleurs sur l'ordinateur."
     ),

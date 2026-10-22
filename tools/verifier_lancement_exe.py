@@ -54,7 +54,7 @@ def trouver_exe() -> pathlib.Path | None:
     return next((p for p in EXES_CANDATS if p.is_file()), None)
 
 #: Modèle attendu dans les dossiers livrés (valeur de config/default.json).
-MODELE_ATTENDU = "medium.pt"
+MODELE_ATTENDU = "tetes-medium.pt"
 
 #: Préfixe du titre de la fenêtre principale (interface/app.py, qui y ajoute
 #: `compteur.VERSION`). Un bout de chaîne suffit : la vérification porte sur le

@@ -46,11 +46,16 @@ C'est pourquoi le modèle par défaut est un détecteur de têtes entraîné sur
 
 **Ce qui a été mesuré**, sur la vidéo de référence :
 
-| modèle | têtes détectées | taille |
+| modèle | têtes détectées | remarque |
 |---|---|---|
-| `yolov8n-head.pt` | 21 px | la plus rapide |
-| `nano.pt` | 28 px | score plus bas |
-| **`medium.pt`** | **29 px** | **le défaut — 38 % de marches en plus que le petit** |
+| `tetes-medium-1280.pt` | 21 px | entraîné en 1280 px — le moins bon ici |
+| `tetes-nano.pt` | 28 px | le plus léger (3,0 M) — score plus bas |
+| **`tetes-medium.pt`** | **29 px** | **le défaut — 38 % de marches en plus que le petit** |
+
+*Noms clarifiés le 22/10/2026 (`cible-poids[-précision]`) : le fichier livré
+comme `yolov8n-head.pt` n'était PAS un modèle « nano » — ses métadonnées
+disent une base taille M (25,9 M paramètres, comme `tetes-medium.pt`), d'où
+son renommage en `tetes-medium-1280.pt`.*
 
 La « vitesse » du modèle est mesurée en px de tête détectée, pas en image par
 seconde. Un modèle plus rapide qui ne voit que des petites têtes est plus rapide

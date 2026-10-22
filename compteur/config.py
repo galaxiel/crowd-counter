@@ -226,7 +226,7 @@ def resoudre_modele(chemin: str) -> pathlib.Path | None:
 
     Un chemin absolu, ou relatif et valide, est pris tel quel. Sinon la même
     recherche reprend dans chaque dossier de `dossiers_modeles()` : c'est ce
-    qui permet à un nom affiché dans la liste (ex. « medium.pt ») de se
+    qui permet à un nom affiché dans la liste (ex. « tetes-medium.pt ») de se
     charger même si le fichier est rangé dans `modeles/` et non à côté de
     l'exécutable. Sans cette recherche, la liste proposait un modèle que le
     chargement refusait — le défaut exact que le dossier `modeles/` devait
@@ -331,10 +331,10 @@ def mode_peripherique(connu: str | None) -> str:
 @dataclass
 class Config:
     # Détection
-    # medium.pt : modèle de tête entraîné sur SCUT-HEAD (foule dense). Sur la
-    # vidéo de référence il donne des têtes de 29 px contre 21 px pour
-    # yolov8n-head.pt, soit 38 % de marches réelles en plus.
-    modele: str = "medium.pt"
+    # tetes-medium.pt : modèle de tête entraîné sur SCUT-HEAD (foule dense).
+    # Sur la vidéo de référence il donne des têtes de 29 px contre 21 px pour
+    # tetes-medium-1280.pt, soit 38 % de marches réelles en plus.
+    modele: str = "tetes-medium.pt"
     seuil_confiance: float = 0.25
     # Une tête détectée sur cette vidéo fait 20-29 px : un seuil de 20 px
     # filtrerait la moitié des détections. 3 px ne filtre que le bruit.

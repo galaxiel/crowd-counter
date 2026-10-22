@@ -108,7 +108,7 @@ def mode_demarrer(timeout: int) -> int:
 
         print(f"cuda dispo : {cuda_disponible()}", flush=True)
         print(f"carte      : {nom_cuda()!r}", flush=True)
-        modele = charger_modele("nano.pt", "auto")
+        modele = charger_modele("tetes-nano.pt", "auto")
         image = np.zeros((640, 640, 3), dtype=np.uint8)
         res = modele(image, verbose=False)
         print(f"inference OK : {len(res)} resultat(s)", flush=True)
