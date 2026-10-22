@@ -42,7 +42,7 @@ pick `tetes-medium.pt` again in the settings (the list proposes it).
 
 ## Verify the download
 
-sha256: `SHA256_A_COMPLETER`
+sha256: `8b14138d1bc189678473acc06abded05af4c9d455949bf5223eabd8861bd4e70`
 
 ## Known limitations
 
