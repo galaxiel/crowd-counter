@@ -725,3 +725,62 @@ def test_le_panneau_defile_dans_la_fenetre(application):
     # Le bouton de lancement doit rester dans la fenêtre.
     assert f.btn_lancer.y() + f.btn_lancer.height() <= 850
     assert f.btn_lancer.isVisible()
+
+
+# -- Dossier de modèles : « Parcourir… » et relecture ------------------------
+
+
+def test_parcourir_pose_le_chemin_du_fichier_choisi(application, monkeypatch, tmp_path):
+    """« Parcourir… » remplit le champ avec le chemin choisi.
+
+    Le fichier n'est PAS recopié : on ne déplace pas les affaires de
+    l'opérateur. Son chemin est posé dans le champ, qui reste éditable — même
+    mécanique qu'un chemin tapé à la main.
+    """
+    choisi = str(tmp_path / "mon-modele.pt")
+    monkeypatch.setattr(
+        "interface.panneau_reglages.QFileDialog.getOpenFileName",
+        lambda *a, **k: (choisi, ""),
+    )
+    p = PanneauReglages(Config(), dossiers_modeles=[tmp_path])
+    p._bouton_modele.click()
+    assert p._modele.currentText() == choisi
+
+
+def test_parcourir_annule_laisse_le_champ_intact(application, monkeypatch, tmp_path):
+    """Annuler la boîte de dialogue ne change rien."""
+    monkeypatch.setattr(
+        "interface.panneau_reglages.QFileDialog.getOpenFileName",
+        lambda *a, **k: ("", ""),
+    )
+    p = PanneauReglages(Config(), dossiers_modeles=[tmp_path])
+    avant = p._modele.currentText()
+    p._bouton_modele.click()
+    assert p._modele.currentText() == avant
+
+
+def test_relecture_decouvre_un_modele_ajoute(application, tmp_path):
+    """Un .pt déposé APRÈS l'ouverture du panneau doit apparaître sans redémarrer."""
+    p = PanneauReglages(Config(), dossiers_modeles=[tmp_path])
+    assert "nouveau.pt" not in p.modeles_proposes()
+    (tmp_path / "nouveau.pt").write_bytes(b"poids")
+    p.rafraichir_choix_modeles()
+    assert "nouveau.pt" in p.modeles_proposes()
+
+
+def test_relecture_conserve_le_choix_courant(application, tmp_path):
+    """Un chemin choisi avec « Parcourir… » ne doit pas être effacé par la relecture."""
+    p = PanneauReglages(Config(), dossiers_modeles=[tmp_path])
+    p._modele.setCurrentText(r"D:\ailleurs\modele.pt")
+    p.rafraichir_choix_modeles()
+    assert p._modele.currentText() == r"D:\ailleurs\modele.pt"
+
+
+def test_ouvrir_la_liste_demande_une_relecture(application):
+    """Ouvrir la liste doit rebalayer les dossiers (c'est `_ListeModeles`)."""
+    from interface.panneau_reglages import _ListeModeles
+
+    appels = []
+    liste = _ListeModeles(lambda: appels.append(True))
+    liste.showPopup()
+    assert appels == [True], "showPopup doit demander la relecture avant d'afficher"

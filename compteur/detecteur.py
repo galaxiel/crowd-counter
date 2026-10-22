@@ -18,7 +18,6 @@ Deux règles structurantes :
 from __future__ import annotations
 
 import logging
-import pathlib
 from typing import NamedTuple
 
 import numpy as np
@@ -28,7 +27,9 @@ from .config import (
     PERIPHERIQUE_CPU,
     PERIPHERIQUE_CUDA,
     Config,
+    dossiers_modeles,
     mode_peripherique,
+    resoudre_modele,
 )
 from .types import Detection
 
@@ -360,16 +361,23 @@ def charger_modele(chemin: str, peripherique: str = PERIPHERIQUE_AUTO):
     `torch`, l'erreur promise par l'API (`FileNotFoundError`) doit rester
     celle que l'appelant reçoit, pas un `ModuleNotFoundError`.
 
+    Le fichier est cherché tel quel, puis dans les dossiers de
+    `config.dossiers_modeles()` (dossier courant, `modeles/`, dossier
+    personnel) — les mêmes que la liste déroulante des réglages, dans le même
+    ordre.
+
     `peripherique` est le réglage de `Config.peripherique` (`auto`, `cuda`,
     `cpu`). La valeur par défaut est `auto`, ce qui reproduit exactement le
     comportement historique : CUDA si la machine en a un, CPU sinon.
     """
-    p = pathlib.Path(chemin)
-    if not p.exists():
+    p = resoudre_modele(chemin)
+    if p is None:
+        cherches = "\n".join(f"  - {d}" for d in dossiers_modeles())
         raise FileNotFoundError(
-            f"modèle introuvable : {p}\n"
-            "Place le fichier .pt dans le dossier du projet, ou change le "
-            "réglage « modele » dans l'interface."
+            f"modèle introuvable : {chemin}\n"
+            f"Cherché tel quel, puis dans :\n{cherches}\n"
+            "Dépose le fichier .pt dans « modeles/ », ou choisis-le avec le "
+            "bouton « Parcourir… » des réglages."
         )
     if p.suffix.lower() not in FORMATS_MODELES:
         raise ValueError(

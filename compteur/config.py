@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import pathlib
 import sys
 from dataclasses import asdict, dataclass, fields, replace
@@ -178,6 +179,69 @@ def chemin_defaut_config() -> pathlib.Path:
     l'import du module. Recalculer rend le chemin vérifiable.
     """
     return _racine() / "config" / "default.json"
+
+
+#: Nom du sous-dossier des poids de modèle. Un seul nom partout — dossier de
+#: l'application, dossier personnel — donc un seul mot à retenir.
+DOSSIER_MODELES_NOM = "modeles"
+
+
+def dossier_modeles_utilisateur() -> pathlib.Path:
+    r"""Dossier de modèles personnels, qui SURVIT aux mises à jour.
+
+    `%LOCALAPPDATA%\CompteurManifestation\modeles` — même parent que le cache
+    d'installation (voir `compteur.telechargement.dossier_cache`, dont un test
+    vérifie la cohérence). Le dossier livré avec l'exécutable est remplacé à
+    chaque nouvelle version extraite ; celui-ci, non : c'est donc ici qu'on
+    range un modèle qu'on ne veut pas recopier après chaque mise à jour.
+    """
+    base = os.environ.get("LOCALAPPDATA")
+    if not base:
+        base = pathlib.Path.home() / "AppData" / "Local"
+    return pathlib.Path(base) / "CompteurManifestation" / DOSSIER_MODELES_NOM
+
+
+def dossiers_modeles() -> tuple[pathlib.Path, ...]:
+    """Dossiers balayés pour trouver les poids, dans l'ordre de PRIORITÉ.
+
+    **L'ordre est un contrat.** C'est lui qui départage deux fichiers du même
+    nom — le premier trouvé gagne — et c'est le même ordre pour la liste
+    déroulante des réglages et pour le chargement du modèle. S'il différait,
+    la liste afficherait un nom que le chargement n'irait pas chercher.
+
+    1. le dossier courant — celui de l'exécutable, au double-clic ;
+    2. `modeles/`, le dossier livré avec l'application ;
+    3. `%LOCALAPPDATA%\\CompteurManifestation\\modeles`, qui survit aux mises
+       à jour.
+    """
+    return (
+        pathlib.Path("."),
+        pathlib.Path(DOSSIER_MODELES_NOM),
+        dossier_modeles_utilisateur(),
+    )
+
+
+def resoudre_modele(chemin: str) -> pathlib.Path | None:
+    """Fichier réel d'un modèle, ou `None` s'il n'existe nulle part.
+
+    Un chemin absolu, ou relatif et valide, est pris tel quel. Sinon la même
+    recherche reprend dans chaque dossier de `dossiers_modeles()` : c'est ce
+    qui permet à un nom affiché dans la liste (ex. « medium.pt ») de se
+    charger même si le fichier est rangé dans `modeles/` et non à côté de
+    l'exécutable. Sans cette recherche, la liste proposait un modèle que le
+    chargement refusait — le défaut exact que le dossier `modeles/` devait
+    éviter.
+    """
+    if not chemin:
+        return None
+    direct = pathlib.Path(chemin)
+    if direct.is_file():
+        return direct
+    for dossier in dossiers_modeles():
+        candidat = pathlib.Path(dossier) / chemin
+        if candidat.is_file():
+            return candidat
+    return None
 
 
 #: Pas de quantum du modèle. YOLO travaille sur des images de côté multiple

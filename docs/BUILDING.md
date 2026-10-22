@@ -38,6 +38,8 @@ torchvision next to a CUDA torch crashes `torchvision::nms` on CUDA. This is
 the single most common packaging mistake here.
 
 Result: `dist/CompteurManifestationV2/` — ~290 MB without the weights
+(`copier_modeles.py` places them in `dist/CompteurManifestationV2/modeles/`,
+the subfolder the application scans and the release zip ships).
 (~360–400 MB with them). torch is NOT bundled; it is downloaded into
 `%LOCALAPPDATA%\CompteurManifestation\` on first launch. The `--workpath
 build/v2` keeps PyInstaller's intermediate `.toc` files in a workpath of their

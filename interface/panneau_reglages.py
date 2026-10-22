@@ -32,7 +32,9 @@ from PySide6.QtCore import Signal
 from PySide6.QtWidgets import (
     QComboBox,
     QDoubleSpinBox,
+    QFileDialog,
     QGroupBox,
+    QHBoxLayout,
     QLabel,
     QPushButton,
     QSpinBox,
@@ -51,6 +53,8 @@ from compteur.config import (
     mode_resolution,
     taille_entree_automatique,
 )
+# Alias : le paramètre `dossiers_modeles` du constructeur masque ce nom.
+from compteur.config import dossiers_modeles as dossiers_modeles_defaut
 from compteur.ligne import (
     LIBELLES_SENS,
     ORIENTATION_HORIZONTALE,
@@ -63,11 +67,12 @@ log = logging.getLogger(__name__)
 #: Emplacement par défaut des profils nommés, relatif au dépôt.
 DOSSIER_PROFILS = pathlib.Path("config") / "profils"
 
-#: Dossiers balayés pour trouver les poids de modèle, dans cet ordre.
-DOSSIERS_MODELES: tuple[pathlib.Path, ...] = (
-    pathlib.Path("."),
-    pathlib.Path("modeles"),
-)
+# Les dossiers balayés pour les poids vivent dans `compteur.config`
+# (`dossiers_modeles`), avec leur ordre de priorité : le CHARGEMENT du modèle
+# et cette liste doivent balayer exactement les mêmes dossiers, dans le même
+# ordre, sinon l'interface proposerait un nom que le chargement refuserait.
+# Alias explicite : le paramètre `dossiers_modeles` de `PanneauReglages` porte
+# le même nom et masquerait la fonction dans le constructeur.
 
 #: Modèle proposé quand aucun `.pt` n'est présent sur le disque.
 #:
@@ -134,13 +139,15 @@ ORIENTATION_SANS_LIGNE = ORIENTATION_VERTICALE
 #: qu'une opinion déguisée en réglage par défaut.
 AIDE: dict[str, str] = {
     "modele": (
-        "Modèle de détection (.pt).\n\n"
+        "Modèle de détection (.pt).\n"
         "Ce que ça fait : cherche des têtes dans l'image — seul réglage qui "
-        "change ce qui est vu, les autres mieux exploitent ce qu'il a vu.\n"
+        "change ce qui est vu.\n"
         "Ce que ça change : plus lent = meilleures petites têtes, donc plus "
-        "de personnes, analyse d'autant plus longue.\n"
-        "Valeur conseillée : medium.pt — il trouve des têtes de 29 px là où "
-        "yolov8n-head.pt en trouve de 21, soit 38 % de marches en plus."
+        "de personnes, analyse plus longue.\n"
+        "Valeur conseillée : medium.pt — 29 px contre 21 pour "
+        "yolov8n-head.pt, 38 % de marches en plus.\n"
+        "Où le ranger : « modeles/ » à côté du logiciel, ou « Parcourir… » "
+        "pour un fichier resté ailleurs sur l'ordinateur."
     ),
     "seuil_confiance": (
         "Seuil de confiance de la détection.\n\n"
@@ -291,7 +298,7 @@ def lister_modeles(
     panneau.
     """
     if dossiers is None:
-        dossiers = DOSSIERS_MODELES
+        dossiers = dossiers_modeles_defaut()
     vus: list[str] = []
     for dossier in dossiers:
         try:
@@ -312,6 +319,27 @@ def lister_profils(dossier: pathlib.Path | None = None) -> list[str]:
     return sorted(p.stem for p in d.glob("*.json"))
 
 
+class _ListeModeles(QComboBox):
+    """Liste déroulante qui REBALAYE les dossiers à chaque ouverture.
+
+    Sans cela la liste est figée au démarrage : un `.pt` déposé dans
+    `modeles/` pendant que le logiciel tourne n'apparaîtrait qu'après un
+    redémarrage. Le rebalayage a lieu juste AVANT l'affichage, donc la liste
+    montre toujours l'état du disque au moment où on l'ouvre.
+
+    Le rebalayage est délégué au panneau (qui connaît ses dossiers) : cette
+    classe ne sait rien des modèles, seulement quand relire.
+    """
+
+    def __init__(self, relister, parent=None) -> None:
+        super().__init__(parent)
+        self._relister = relister
+
+    def showPopup(self) -> None:  # noqa: N802 — API Qt
+        self._relister()
+        super().showPopup()
+
+
 class PanneauReglages(QWidget):
     """Quatre groupes de réglages + gestion des profils nommés."""
 
@@ -328,7 +356,7 @@ class PanneauReglages(QWidget):
         self._dossiers_modeles = (
             tuple(dossiers_modeles)
             if dossiers_modeles is not None
-            else DOSSIERS_MODELES
+            else dossiers_modeles_defaut()
         )
         # Tant que le panneau se construit, aucun signal ne doit sortir : on
         # pose les widgets dans le silence, l'application n'a rien demandé.
@@ -456,14 +484,31 @@ class PanneauReglages(QWidget):
         g = QGroupBox("Détection")
         v = QVBoxLayout(g)
 
-        self._modele = QComboBox()
-        # Editable : le modèle peut venir d'ailleurs (téléchargé à la main,
-        # chemin absolu) et n'est pas forcément dans le dossier balayé.
+        self._modele = _ListeModeles(self.rafraichir_choix_modeles)
+        # Editable : un modèle peut venir d'ailleurs (choisi avec
+        # « Parcourir… », chemin absolu) et n'est pas forcément dans un dossier
+        # balayé.
         self._modele.setEditable(True)
+        self._modele.setToolTip(self._aide("modele"))
         self._modele.addItems(lister_modeles(self._dossiers_modeles))
         self._modele.setCurrentText(c.modele)
         self._modele.currentTextChanged.connect(self._emettre)
-        self._poser(v, "modele", "Modèle (fichier .pt)", self._modele)
+
+        # Le bouton ouvre l'explorateur de fichiers : la façon normale de
+        # désigner un `.pt` rangé n'importe où sur l'ordinateur. Le champ
+        # restant éditable, un chemin peut aussi être collé à la main.
+        self._bouton_modele = QPushButton("Parcourir…")
+        self._bouton_modele.setToolTip(
+            "Choisir un fichier de modèle (.pt ou .onnx) ailleurs sur "
+            "l'ordinateur."
+        )
+        self._bouton_modele.clicked.connect(self._on_parcourir_modele)
+        ligne_modele = QWidget()
+        rangee = QHBoxLayout(ligne_modele)
+        rangee.setContentsMargins(0, 0, 0, 0)
+        rangee.addWidget(self._modele, stretch=1)
+        rangee.addWidget(self._bouton_modele)
+        self._poser(v, "modele", "Modèle (fichier .pt)", ligne_modele)
 
         # Le titre du seuil porte la valeur : c'est le seul réglage dont
         # l'effet n'est pas lisible dans la boîte qui le contient.
@@ -676,6 +721,40 @@ class PanneauReglages(QWidget):
     def modeles_proposes(self) -> list[str]:
         """Noms de modèles actuellement proposés dans la liste déroulante."""
         return [self._modele.itemText(i) for i in range(self._modele.count())]
+
+    def rafraichir_choix_modeles(self) -> None:
+        """Rebalaye les dossiers et complète la liste, sans perdre le choix.
+
+        Appelée à chaque ouverture de la liste (`_ListeModeles`) : un `.pt`
+        déposé dans `modeles/` pendant que le logiciel tourne apparaît donc
+        sans redémarrer. Le texte courant est PRÉSERVÉ — un chemin choisi avec
+        « Parcourir… » ne doit pas être effacé par un rafraîchissement, et les
+        signaux sont bloqués pour que reconstruire la liste ne réémette pas
+        une config identique.
+        """
+        courant = self._modele.currentText()
+        bloque = self._modele.blockSignals(True)
+        self._modele.clear()
+        self._modele.addItems(lister_modeles(self._dossiers_modeles))
+        self._modele.setCurrentText(courant)
+        self._modele.blockSignals(bloque)
+
+    def _on_parcourir_modele(self) -> None:
+        """Ouvre l'explorateur et pose le chemin ABSOLU du fichier choisi.
+
+        Chemin absolu, et non recopié dans `modeles/` : on ne déplace pas le
+        fichier de l'opérateur sans le lui dire. C'est le champ éditable du
+        modèle qui porte ce chemin, comme s'il avait été tapé à la main.
+        """
+        depart = str(pathlib.Path(self._dossiers_modeles[0]).resolve())
+        chemin, _filtre = QFileDialog.getOpenFileName(
+            self,
+            "Choisir un fichier de modèle",
+            depart,
+            "Modèles (*.pt *.onnx);;Tous les fichiers (*)",
+        )
+        if chemin:
+            self._modele.setCurrentText(chemin)
 
     def noms_profils(self) -> list[str]:
         """Noms de profils actuellement proposés à l'utilisateur."""

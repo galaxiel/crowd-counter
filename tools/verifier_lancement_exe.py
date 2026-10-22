@@ -53,7 +53,7 @@ def trouver_exe() -> pathlib.Path | None:
     """Premier exécutable construit, ou None."""
     return next((p for p in EXES_CANDATS if p.is_file()), None)
 
-#: Modèle attendu à côté de l'exécutable (valeur de config/default.json).
+#: Modèle attendu dans les dossiers livrés (valeur de config/default.json).
 MODELE_ATTENDU = "medium.pt"
 
 #: Préfixe du titre de la fenêtre principale (interface/app.py, qui y ajoute
@@ -191,17 +191,24 @@ def verifier(attente: int) -> int:
             echecs.append("le processus s'est arrêté de lui-même pendant l'analyse")
 
     # -- 4. Les poids. ---------------------------------------------------
-    print("\n[4] poids à côté de l'exécutable :")
-    poids = sorted(EXE.parent.glob("*.pt"))
+    print("\n[4] poids livrés avec l'exécutable :")
+    # Depuis la v2.3.0 les poids sont rangés dans `modeles/` — le dossier que
+    # le logiciel balaie. Le dossier de l'exécutable reste accepté : on y a
+    # longtemps déposé les `.pt`, et une installation peut encore les avoir là.
+    emplacements = (EXE.parent / "modeles", EXE.parent)
+    poids = sorted({p for dossier in emplacements for p in dossier.glob("*.pt")})
     if poids:
         for p in poids:
-            print(f"    {p.name}  ({p.stat().st_size / 1024 / 1024:.1f} Mo)")
+            print(
+                f"    {p.relative_to(EXE.parent)}  "
+                f"({p.stat().st_size / 1024 / 1024:.1f} Mo)"
+            )
     else:
         print("    (aucun)")
-    if not (EXE.parent / MODELE_ATTENDU).is_file():
+    if not any((dossier / MODELE_ATTENDU).is_file() for dossier in emplacements):
         echecs.append(
-            f"{MODELE_ATTENDU} absent de {EXE.parent} — "
-            "lancer `python tools/copier_modeles.py`"
+            f"{MODELE_ATTENDU} absent de {EXE.parent / 'modeles'} et de "
+            f"{EXE.parent} — lancer `python tools/copier_modeles.py`"
         )
 
     # -- 5. Le repli silencieux. ----------------------------------------

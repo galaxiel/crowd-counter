@@ -121,25 +121,21 @@ python -m pip install -r requirements-dev.txt
 
 ## Where to put the models
 
-The settings panel lists the `.pt` files it finds in two folders, in this
-order:
+The software looks for `.pt` files in three folders, in this order:
 
-1. the current folder;
-2. `modeles/`.
+1. the current folder — the executable's own folder on a double-click;
+2. `modeles/`, shipped next to the executable;
+3. `%LOCALAPPDATA%\CompteurManifestation\modeles` — a personal folder that
+   **survives updates** (the folder shipped with the executable is replaced
+   when you extract a new version; this one is not).
 
-Practical consequence:
+Every `.pt` found there shows up in the *Modèle* dropdown, and loading
+searches **the same folders in the same order** — a model that is listed is a
+model that loads. Drop a file into `modeles/` while the app is running: it
+appears the next time you open the list, no restart needed.
 
-| Where I launch it | Where I put the `.pt` files |
-|---|---|
-| `python main.py` from the root | at the repository root |
-| `dist\CompteurManifestationV2\CompteurManifestationV2.exe` | in `dist\CompteurManifestationV2\` |
-
-Double-clicking the executable makes the executable's own folder the current
-folder: weights dropped into `dist\CompteurManifestationV2\` therefore appear in
-the dropdown without any configuration.
-
-The field stays **editable**: you can type an absolute path to a `.pt` that is
-in neither folder.
+The *Parcourir…* button picks a `.pt`/`.onnx` from anywhere on the computer.
+The field stays **editable**, so an absolute path can also be typed by hand.
 
 After a rebuild:
 
@@ -147,8 +143,9 @@ After a rebuild:
 python tools/copier_modeles.py
 ```
 
-copies the weights from the root to `dist/`. `--propre` only copies what is
-missing.
+copies the weights into `dist\CompteurManifestationV2\modeles\` (the folder
+the app scans, and the one shipped in the release zip). `--propre` only
+copies what is missing.
 
 ## Performance
 
