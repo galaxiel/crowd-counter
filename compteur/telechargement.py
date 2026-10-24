@@ -241,7 +241,7 @@ def chemin_python(dossier: pathlib.Path | None = None) -> pathlib.Path:
     """`python.exe` DU VENV.
 
     **Jamais `sys.executable`.** Dans un exécutable gelé, `sys.executable` est
-    `CompteurManifestationV2.exe` : l'appeler en sous-processus pour tester un
+    `CompteurManifestation.exe` : l'appeler en sous-processus pour tester un
     import relancerait l'application entière, fenêtre comprise. C'est un bug
     qui ne se voit pas depuis les sources, où `sys.executable` est précisément
     le bon interpréteur.

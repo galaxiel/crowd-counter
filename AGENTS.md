@@ -1,4 +1,4 @@
-# crowd-counter-v2 — instructions agents
+# crowd-counter — instructions agents
 
 Compteur de personnes franchissant une ligne virtuelle dans une vidéo de manifestation.
 App desktop PySide6, moteur de comptage YOLO + tracker IoU, Python 3.11.
@@ -9,7 +9,7 @@ Il ne remplace pas `README.md` (public, en anglais) ni `docs/`.
 ## Interpréteur — le piège principal
 
 ```bash
-cd "D:/Bureau/projet manif/crowd-counter-v2"
+cd "D:/Bureau/projet manif/crowd-counter"
 /c/Python311/python -m pytest tests/ -v
 ```
 

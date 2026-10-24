@@ -2,15 +2,15 @@
 r"""PyInstaller : construit la version 2, SANS torch, qui le télécharge au premier
 lancement.
 
-    python -m PyInstaller --clean --workpath build/v2 crowd-counter-v2.spec
+    python -m PyInstaller --clean --workpath build/v2 crowd-counter.spec
 
-Le `COLLECT` porte `name="CompteurManifestationV2"`, donc la sortie est
-`dist/CompteurManifestationV2/`. NE PAS passer `--distpath` en plus : le
-dossier serait cree deux fois (`dist/X/CompteurManifestationV2/`).
+Le `COLLECT` porte `name="CompteurManifestation"`, donc la sortie est
+`dist/CompteurManifestation/`. NE PAS passer `--distpath` en plus : le
+dossier serait cree deux fois (`dist/X/CompteurManifestation/`).
 
 Puis copier les poids à côté de l'exécutable :
 
-    python tools/copier_modeles.py --dest dist/CompteurManifestationV2
+    python tools/copier_modeles.py --dest dist/CompteurManifestation
 
 **Ce que change la v2, et pourquoi c'est possible.** La v1 pesait 4,25 Go, dont
 ~3,8 Go de DLL CUDA amenées par `hook-torch.py` via `collect_dynamic_libs`
@@ -285,7 +285,7 @@ _COMMUN_EXE = dict(
     # Nom différent de la v1 : les deux installations doivent coexister sur
     # le même poste de travail. Un même nom ferait que la v2 écrase la v1 à
     # l'installation — ce qui est explicitement interdit ici.
-    name="CompteurManifestationV2",
+    name="CompteurManifestation",
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -329,6 +329,6 @@ else:
         strip=False,
         upx=False,
         upx_exclude=[],
-        name="CompteurManifestationV2",
+        name="CompteurManifestation",
     )
     Path(coll.name, "pyi_mode.txt").write_text("onedir\n", encoding="utf-8")

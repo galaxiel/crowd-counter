@@ -39,11 +39,11 @@ sys.path.insert(0, str(RACINE))
 from compteur.config import DOSSIER_MODELES_NOM  # noqa: E402
 
 #: Sorties de build acceptées, dans l'ordre de préférence. Le `.spec` produit
-#: un DOSSIER (`dist/CompteurManifestationV2/`) et non un `.exe` isolé ; les
+#: un DOSSIER (`dist/CompteurManifestation/`) et non un `.exe` isolé ; les
 #: poids vont dans son sous-dossier `modeles/`, celui que le logiciel balaie.
 #: Si un build onefile a été produit, ils vont dans `dist/modeles/`.
 BUILDS_CIBLES = (
-    RACINE / "dist" / "CompteurManifestationV2",
+    RACINE / "dist" / "CompteurManifestation",
     RACINE / "dist",
 )
 
@@ -146,7 +146,7 @@ def main(argv: list[str] | None = None) -> int:
             print(
                 f"ERREUR : aucun dossier de build trouvé ({BUILDS_CIBLES[0]}).\n"
                 "Construis d'abord l'exécutable :\n"
-                "    python -m PyInstaller --clean --workpath build/v2 crowd-counter-v2.spec",
+                "    python -m PyInstaller --clean --workpath build/v2 crowd-counter.spec",
                 file=sys.stderr,
             )
             return 1

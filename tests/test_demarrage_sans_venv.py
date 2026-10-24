@@ -309,7 +309,7 @@ def test_le_spec_embarque_numpy():
     acceptable : 322 Mo de fichiers que personne ne peut ouvrir valent moins
     que 380 Mo qui s'ouvrent.
     """
-    source = (RACINE / "crowd-counter-v2.spec").read_text(encoding="utf-8")
+    source = (RACINE / "crowd-counter.spec").read_text(encoding="utf-8")
     arbre = ast.parse(source)
 
     exclus: set[str] = set()

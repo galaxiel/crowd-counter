@@ -44,13 +44,13 @@ ones — 38 % more real crossings.
 
 ## Running without installing anything
 
-`dist/CompteurManifestationV2/` is self-contained: Python does not need to be
+`dist/CompteurManifestation/` is self-contained: Python does not need to be
 installed on the machine.
 
-1. Copy the whole `dist/CompteurManifestationV2/` folder **whole** to wherever
+1. Copy the whole `dist/CompteurManifestation/` folder **whole** to wherever
    you want (a USB stick, a desktop, `C:\Program Files\`) — the `.exe` alone
    is not enough, it needs its neighbouring DLLs.
-2. Double-click `CompteurManifestationV2.exe`.
+2. Double-click `CompteurManifestation.exe`.
 
 A black console window opens next to the application: that is intentional. It
 shows the log and, if something goes wrong, the traceback. Closing the
@@ -65,7 +65,7 @@ PyInstaller can bundle everything into one file ("onefile"). With torch CUDA
 this mode **does not work**: the archive format uses signed 32-bit offsets,
 and the CUDA DLLs alone weigh 3.8 GB. The binary builds without error, then
 **crashes at launch**, exiting without a message. The details are in
-`crowd-counter-v2.spec`; the workaround (for a CPU install that fits under 2 GB)
+`crowd-counter.spec`; the workaround (for a CPU install that fits under 2 GB)
 is `COMPTEUR_ONEFILE=1`.
 
 The folder mode has a direct advantage for this software: no decompressing
@@ -74,8 +74,8 @@ The folder mode has a direct advantage for this software: no decompressing
 ### What must sit next to the executable
 
 ```
-dist/CompteurManifestationV2/
-├── CompteurManifestationV2.exe
+dist/CompteurManifestation/
+├── CompteurManifestation.exe
 ├── _internal/                  <- DLLs and Python modules, don't touch
 └── modeles/                    <- the models; the app scans this folder
     ├── tetes-medium.pt         <- default (head detector, 25.9 M params)
@@ -144,7 +144,7 @@ After a rebuild:
 python tools/copier_modeles.py
 ```
 
-copies the weights into `dist\CompteurManifestationV2\modeles\` (the folder
+copies the weights into `dist\CompteurManifestation\modeles\` (the folder
 the app scans, and the one shipped in the release zip). `--propre` only
 copies what is missing.
 
@@ -189,7 +189,7 @@ build verification. The shape of it:
 
 ```bash
 python -m venv build-env
-build-env\Scripts\python -m PyInstaller --clean --workpath build/v2 crowd-counter-v2.spec
+build-env\Scripts\python -m PyInstaller --clean --workpath build/v2 crowd-counter.spec
 build-env\Scripts\python tools/copier_modeles.py
 ```
 

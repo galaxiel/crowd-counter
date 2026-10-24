@@ -29,7 +29,7 @@ build-env\Scripts\python -m pip install torch==2.14.1+cu126 torchvision==0.29.1+
 build-env\Scripts\python -m pip install ultralytics opencv-python PySide6 pyinstaller pytest
 
 # 4. build — note the workpath
-build-env\Scripts\python -m PyInstaller --clean --workpath build/v2 crowd-counter-v2.spec
+build-env\Scripts\python -m PyInstaller --clean --workpath build/v2 crowd-counter.spec
 build-env\Scripts\python tools/copier_modeles.py
 ```
 
@@ -37,8 +37,8 @@ build-env\Scripts\python tools/copier_modeles.py
 torchvision next to a CUDA torch crashes `torchvision::nms` on CUDA. This is
 the single most common packaging mistake here.
 
-Result: `dist/CompteurManifestationV2/` — ~290 MB without the weights
-(`copier_modeles.py` places them in `dist/CompteurManifestationV2/modeles/`,
+Result: `dist/CompteurManifestation/` — ~290 MB without the weights
+(`copier_modeles.py` places them in `dist/CompteurManifestation/modeles/`,
 the subfolder the application scans and the release zip ships).
 (~360–400 MB with them). torch is NOT bundled; it is downloaded into
 `%LOCALAPPDATA%\CompteurManifestation\` on first launch. The `--workpath
@@ -122,7 +122,7 @@ The application reports it in the status bar and in the console, and analyses
 anyway on the CPU, very slowly.
 
 Under PyInstaller, two traps were handled explicitly (see
-`crowd-counter-v2.spec` and `hooks-v2/hook-torchvision.py`):
+`crowd-counter.spec` and `hooks-v2/hook-torchvision.py`):
 
 - torchvision's NMS extension is called `_C.stable` since 0.29 and is not a
   Python module: without a dedicated hook, inference stops on `Couldn't load

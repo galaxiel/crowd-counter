@@ -40,12 +40,12 @@ import time
 RACINE = pathlib.Path(__file__).resolve().parent.parent
 
 #: Emplacements selon le mode de build. Le `.spec` produit par défaut un
-#: DOSSIER (`dist/CompteurManifestationV2/`) — le onefile reste possible via
-#: `COMPTEUR_ONEFILE=1` (voir `crowd-counter-v2.spec`). Les deux sont
+#: DOSSIER (`dist/CompteurManifestation/`) — le onefile reste possible via
+#: `COMPTEUR_ONEFILE=1` (voir `crowd-counter.spec`). Les deux sont
 #: essayés pour que l'outil serve dans les deux cas.
 EXES_CANDATS = (
-    RACINE / "dist" / "CompteurManifestationV2" / "CompteurManifestationV2.exe",
-    RACINE / "dist" / "CompteurManifestationV2.exe",
+    RACINE / "dist" / "CompteurManifestation" / "CompteurManifestation.exe",
+    RACINE / "dist" / "CompteurManifestation.exe",
 )
 
 
@@ -100,7 +100,7 @@ def verifier(attente: int) -> int:
         print("ERREUR : aucun exécutable construit.", file=sys.stderr)
         print(f"Emplacements attendus :\n{attendu}", file=sys.stderr)
         print(
-            "Construisez-le : python -m PyInstaller --clean --workpath build/v2 crowd-counter-v2.spec",
+            "Construisez-le : python -m PyInstaller --clean --workpath build/v2 crowd-counter.spec",
             file=sys.stderr,
         )
         return 1
@@ -109,7 +109,7 @@ def verifier(attente: int) -> int:
     taille_mo = EXE.stat().st_size / 1024 / 1024
     mode = (
         "one-dossier"
-        if EXE.parent.name == "CompteurManifestationV2"
+        if EXE.parent.name == "CompteurManifestation"
         else "onefile"
     )
     print(f"exécutable  : {EXE}  ({taille_mo:.1f} Mo)")

@@ -1,6 +1,6 @@
 # Hooks PyInstaller de la version 2
 
-Ce répertoire est utilisé exclusivement par `crowd-counter-v2.spec` (via
+Ce répertoire est utilisé exclusivement par `crowd-counter.spec` (via
 `hookspath`). Depuis le retrait de la v1 (06/10/2026), c'est le seul jeu de
 hooks du projet : l'ancien répertoire `hooks/` et son `crowd-counter.spec`
 sont dans l'historique git, et `HISTOIRE.md` raconte pourquoi la v1 avait
@@ -29,7 +29,7 @@ ferait un `import torchvision` et un `collect_dynamic_libs` au build — donc
 
 ## Vérifier après un build
 
-    python -c "import os;print(sum(os.path.getsize(os.path.join(r,f)) for r,_,fs in os.walk('dist/CompteurManifestationV2') for f in fs)/2**20, 'Mo')"
+    python -c "import os;print(sum(os.path.getsize(os.path.join(r,f)) for r,_,fs in os.walk('dist/CompteurManifestation') for f in fs)/2**20, 'Mo')"
 
 Si le chiffre dépasse ~120 Mo, le hook officiel a gagné : `hook-torch.py` ou
 `hook-torchvision.py` doit être absent de `hooks-v2/`.

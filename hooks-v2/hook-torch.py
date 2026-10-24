@@ -1,7 +1,7 @@
 """Hook PyInstaller V2 : ne rien collecter de torch. Volontairement vide.
 
 **Pourquoi ce fichier existe.** `excludes = ["torch", ...]` dans
-`crowd-counter-v2.spec` ne suffit PAS. PyInstaller exécute les hooks dans une
+`crowd-counter.spec` ne suffit PAS. PyInstaller exécute les hooks dans une
 passe séparée, et `pyinstaller_hooks_contrib/stdhooks/hook-torch.py` appelle
 `collect_data_files` / `collect_dynamic_libs` / `collect_submodules` sans
 consulter la liste d'exclusions. Résultat mesuré : les 3,8 Go de DLL CUDA
