@@ -13,13 +13,20 @@ cd "D:/Bureau/projet manif/crowd-counter"
 /c/Python311/python -m pytest tests/ -v
 ```
 
-`/c/Python311/python` est le seul interpréteur avec pytest + cv2 + torch CUDA + ultralytics.
-Il lui manque PySide6 et pyinstaller ; l'environnement de build est `D:\build-env-tmp`.
+`/c/Python311/python` est le seul interpréteur complet : pytest, cv2, PySide6, torch CUDA
+(`2.14.1+cu126`), ultralytics 8.4, numpy, pyinstaller 6.22. Vérifié le 28/10/2026.
+
+Deux environnements gitignorés, supprimables et recréables vivent dans le dépôt :
+
+- `venv-temp/` — la suite de tests (torch **CPU** suffit : elle ne fait aucune inférence) ;
+- `build-env/` — construire l'exe (torch CUDA + PyInstaller), procédure dans `docs/BUILDING.md`.
+
+Ne jamais réinstaller un environnement qui existe déjà.
 
 Avant de travailler, vérifier d'un coup :
 
 ```bash
-/c/Python311/python -c "import pytest,cv2,torch,ultralytics;print(torch.__version__, torch.cuda.is_available())"
+/c/Python311/python -c "import pytest,cv2,PySide6,torch,ultralytics,numpy;print(torch.__version__, torch.cuda.is_available())"
 ```
 
 - `torch.__version__` doit contenir `+cu126`. Un torch CPU s'installe silencieusement et affiche
