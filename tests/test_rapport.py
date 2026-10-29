@@ -180,8 +180,8 @@ def test_indicateurs_de_fiabilite_presents():
         "nb_tracks_comptes",
         "nb_tracks_vus",
         "duree_vie_moyenne_track_frames",
-        "detections_par_frame_moyen",
-        "detections_par_frame_max",
+        "tracks_presents_moyen",
+        "tracks_presents_max",
     ):
         assert cle in f, f"indicateur de fiabilité manquant : {cle}"
 

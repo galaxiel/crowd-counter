@@ -132,7 +132,7 @@ def _pic_de_debit(evenements: list, fenetre: float) -> int:
     """Plus grand nombre d'événements dans une fenêtre glissante de `fenetre`.
 
     Fenêtre glissante et non « première minute de la vidéo » : un pic de
-   |POLICE| plus de dix passages en deux secondes doit ressortir, sinon le
+    débit — plus de dix passages en deux secondes — doit ressortir, sinon le
     débit maximal ne décrit pas le risque pour un lieu bondé.
 
     Fenêtre de durée nulle (durée inconnue) : on retient tout, ce qui évite
@@ -257,8 +257,14 @@ def indicateurs_fiabilite(resultat: Resultat) -> dict:
         "evenements_par_track": (
             round(len(evenements) / len(distincts), 2) if distincts else None
         ),
-        "detections_par_frame_moyen": round(presents_moyen, 2),
-        "detections_par_frame_max": presents_max,
+        # Tracks présents par frame — et NON détections : `presents` est le
+        # nombre de tracks confirmés simultanément, pas la sortie brute du
+        # détecteur. Les nommer « detections » laissait croire à une mesure
+        # que ces valeurs ne sont pas. (Le vrai `Resultat.detections_par_frame`
+        # existe mais n'est pas ici : `presents` est ce qui dit si le suivi
+        # tient, c'est l'indicateur de fiabilité recherché.)
+        "tracks_presents_moyen": round(presents_moyen, 2),
+        "tracks_presents_max": presents_max,
         "frames_par_evenement": (
             round(nb_frames / total, 2) if nb_frames > 0 and total > 0 else None
         ),
