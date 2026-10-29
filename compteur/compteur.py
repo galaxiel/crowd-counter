@@ -13,7 +13,7 @@ from typing import Callable
 
 import numpy as np
 
-from .config import BANDE_APRES_PX, BANDE_AVANT_PX, DUREE_BOITE_COMPTEE_FRAMES, Config
+from .config import BANDE_APRES_PX, BANDE_AVANT_PX, Config
 from .detecteur import Detecteur, charger_modele
 from .ligne import Ligne
 from .tracker import Tracker

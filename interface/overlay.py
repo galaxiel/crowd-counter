@@ -173,30 +173,6 @@ def _boite(img: np.ndarray, x1, y1, x2, y2, couleur) -> None:
         lineType=cv2.LINE_AA,
     )
 
-def _fondre(couleur, img, x1, y1, opacite: float) -> tuple:
-    """Mélange ``couleur`` avec le fond réel, pour un tracé semi-transparent.
-
-    On ne dessine pas sur un calque séparé : on calcule la couleur du trait
-    comme un mélange entre le vert et le pixel déjà peint sous la boîte. Le
-    résultat est un fondu visuellement équivalent pour un trait de 2 px, au
-    coût d'une lecture de deux pixels.
-
-    Le pixel d'échantillonnage est le coin haut-gauche de la boîte, borné dans
-    l'image : une boîte de comptage peut être à moitié hors cadre, et un index
-    négatif lirait — en numpy — le bas de l'image, donc un vert qui ne
-    s'éteindrait pas du tout.
-    """
-    if opacite >= 1.0:
-        return couleur
-    hauteur, largeur = img.shape[:2]
-    px = min(max(int(x1), 0), largeur - 1)
-    py = min(max(int(y1), 0), hauteur - 1)
-    fond = img[py, px].astype(np.float32)
-    return tuple(
-        int(round(float(c) * opacite + float(f) * (1.0 - opacite)))
-        for c, f in zip(couleur, fond)
-    )
-
 
 def _boite_pleine(img: np.ndarray, x1: float, y1: float, x2: float, y2: float, couleur) -> None:
     """Remplit toute la surface d'une boîte comptée, cadre compris.

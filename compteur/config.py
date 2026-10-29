@@ -101,17 +101,14 @@ PLAFOND_ANALYSE = 1280
 #: pixels de l'image native.
 #:
 #: Le modèle ne tourne pas sur l'image entière mais sur une bande
-#: **dissymétrique** : 200 px du côté d'où viennent les gens, 100 px de l'autre.
-#: Ce n'est pas un réglage : c'est une propriété géométrique de la ligne, elle
-#: se déplace donc AVEC elle.
+#: **symétrique** : 250 px de chaque côté. Ce n'est pas un réglage : c'est une
+#: propriété géométrique de la ligne, elle se déplace donc AVEC elle.
 #:
-#: **Pourquoi dissymétrique.** Avant la ligne, le tracker a besoin d'espace pour
-#: CONSTRUIRE l'identité de quelqu'un qui approche — plusieurs frames, des
-#: images successives, pour associer les boîtes à un track stable. Après la
-#: ligne, le compte est fait : `a_traverse` exige un côté de départ strictement
-#: positif, cette personne ne peut donc plus jamais compter. Il ne reste qu'à
-#: la voir passer, et 100 px suffisent. Les 100 px que la bande symétrique
-#: gaspillait de ce côté-là ne servaient à rien.
+#: **Pourquoi une bande, même symétrique.** Avant la ligne, le tracker a besoin
+#: d'espace pour CONSTRUIRE l'identité de quelqu'un qui approche — plusieurs
+#: frames, des images successives, pour associer les boîtes à un track stable.
+#: Après la ligne, le compte est fait : `a_traverse` exige un côté de départ
+#: strictement positif, cette personne ne peut donc plus jamais compter.
 #:
 #: « Avant » et « après » ne sont pas des mots de dessin mais le vocabulaire de
 #: `compteur.ligne` : côté de DÉPART (coordonnée positive sur la normale,

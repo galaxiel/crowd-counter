@@ -1,7 +1,7 @@
 """Mesure de contrôle : décompte sur 3000 frames de la vidéo de référence.
 
-Comparaison dissymétrique (200 avant / 100 après) contre l'ancienne bande
-symétrique de 200 px, sur la MÊME ligne. La seule variable est la géométrie.
+Comparaison de la bande de détection actuelle (250 px de chaque côté) contre
+une bande plus étroite, sur la MÊME ligne. La seule variable est la géométrie.
 
 Usage :
     /c/Python311/python tools/mesurer_bande.py "D:/Bureau/manif_test.mp4"
@@ -76,18 +76,18 @@ def main() -> None:
 
     resultats = {}
     for nom, avant, apres in (
-        ("bande DISSYMÉTRIQUE 200/100", BANDE_AVANT_PX, BANDE_APRES_PX),
-        ("bande SYMÉTRIQUE 200 (ancien)", 100, 100),
+        ("bande actuelle 250/250", BANDE_AVANT_PX, BANDE_APRES_PX),
+        ("bande SYMÉTRIQUE 200", 100, 100),
         ("bande SYMÉTRIQUE 300", 150, 150),
     ):
         total, n, duree = compter(chemin, sense, avant, apres)
         resultats[nom] = total
         print(f"{nom:32} : {total:4d} personnes  ({n} frames, {duree:.0f} s)")
 
-    nouveau = resultats["bande DISSYMÉTRIQUE 200/100"]
-    ancien = resultats["bande SYMÉTRIQUE 200 (ancien)"]
-    print(f"\n dissymétrique vs ancienne symétrique : {nouveau - ancien:+d} "
-          f"({(nouveau - ancien) / max(1, ancien) * 100:+.1f} %)")
+    actuelle = resultats["bande actuelle 250/250"]
+    etroite = resultats["bande SYMÉTRIQUE 200"]
+    print(f"\n actuelle (250/250) vs étroite (200) : {actuelle - etroite:+d} "
+          f"({(actuelle - etroite) / max(1, etroite) * 100:+.1f} %)")
 
 
 if __name__ == "__main__":

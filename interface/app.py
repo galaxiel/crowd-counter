@@ -4,11 +4,12 @@ Trois décisions structurent ce module, et chacune a un test qui la verrouille.
 
 **1. Deux minuteries, jamais une.** Le traitement d'une frame (détection YOLO
 sur GPU, tracking, franchissement) et son affichage ont deux cadences
-indépendantes : le traitement est aussi rapide que la machine le permet,
-l'affichage est ce que l'opérateur a choisi. Le curseur de vitesse ne règle
-donc QUE l'intervalle du timer d'affichage — celui du traitement reste à 0 ms.
-Avec un seul minuteur (ce que le plan proposait), ralentir l'affichage
-ralentirait le COMPTAGE : le décompte dépendrait de la vitesse de présentation.
+indépendantes : le traitement est aussi rapide que la machine le permet
+(intervalle à 0 ms), l'affichage est cadencé à `CADENCE_AFFICHAGE_IPS`
+(15 i/s, fixe). Séparer les deux garantit qu'une affichage plus lent ne
+ralentit jamais le COMPTAGE : le décompte ne dépend pas de la vitesse de
+présentation. (Un curseur de vitesse d'affichage a existé puis été retiré :
+il ne réglait que le timer d'affichage, jamais celui du traitement.)
 
 **2. La ligne se trace à la souris, en coordonnées image.** `WidgetVideo.clic`
 émet déjà des pixels de l'image SOURCE ; ce module ne fait que les assembler en
@@ -109,10 +110,11 @@ FILTRES_VIDEOS = (
 #: La liste est bornée DEUX fois, par deux règles indépendantes, parce que
 #: chacune rattrape une défaillance de l'autre :
 #:
-#: 1. **Une durée** (`DUREE_BOITE_COMPTEE_FRAMES`, 145 frames ≈ 5 s) : c'est
-#:    la règle qui décide de la vie réelle d'une boîte verte. 100 px après la
-#:    ligne à 0,69 px/frame mesuré : c'est le temps que la personne met à sortir
-#:    de la zone utile. Au-delà, elle n'est plus là, la garder n'apprend rien.
+#: 1. **Une durée** (`DUREE_BOITE_COMPTEE_FRAMES`, 400 frames ≈ 13 s) : c'est
+#:    la règle qui décide de la vie réelle d'une boîte verte. 250 px après la
+#:    ligne à 0,69 px/frame mesuré (~362 frames) : c'est le temps que la
+#:    personne met à sortir de la zone utile. Au-delà, elle n'est plus là,
+#:    la garder n'apprend rien.
 #: 2. **Un nombre** (cette constante, 200) : c'est le filet de sécurité. Si la
 #:    règle de durée venait à ne pas purger — un `frame_index` qui ne
 #:    progresse pas, une pause, un test qui fige le compteur — la liste ne peut
@@ -643,12 +645,9 @@ class FenetrePrincipale(QMainWindow):
         # Le marqueur d'événements consommés repart avec : l'historique du
         # compteur est celui de la vidéo précédente, et il sera vidé avec elle.
         self._dernier_evenement_affiche = 0
-        # Nouvelle vidéo : l'ancienne ligne était verrouillée pour l'analyse
-        # qui vient de s'arrêter. Sans ce déverrouillage, l'opérateur ne
-        # pourrait plus la déplacer, et le bouton « Tracer la ligne » échouerait
-        # silencieusement.
-        if self.ligne is not None:
-            self.ligne.deverrouiller()
+        # Nouvelle vidéo : l'ancienne ligne appartenait à l'image qui vient
+        # d'être remplacée et a déjà été mise à `None` plus haut — rien à
+        # déverrouiller, la référence n'existe plus.
         self.video.definir_zone_deplacement(None)
         # Le récapitulatif concernait l'analyse précédente : il n'a plus de
         # rapport avec cette vidéo-ci et disparaît avec elle.
