@@ -386,15 +386,15 @@ class Config:
     # dernières positions fait ressortir la tendance — le bruit aléatoire
     # s'annule par moyennage, le mouvement constant se cumule.
     # K=1 = mode « brut » : position instantanée, comportement inchangé.
-    # K>1 est VOLONTAIREMENT inactif par défaut. Raison mesurée : le lissage
-    # retarde la détection du croisement d'une demi-fenetre, mais le verrou
-    # anti-rebond lit toujours le côté de la position BRUTE. Au moment où le
-    # croisement lissé est détecté, la position brute est déjà passée de
-    # l'autre côté : `_cotes` vaut -1 et `_stabilite` 0, donc le verrou
-    # REJETTE. Mesuré : la marche de référence passe de 1 comptage (K=1) à 0
-    # (K=5, 10, 20). Pour activer K>1, il faut d'abord faire lire
-    # `_cotes`/`_stabilite` à la position lissée elle aussi — voir le rapport
-    # de tâche 6, section 4.4.
+    #
+    # Le verrou anti-rebond (`_cotes` / `_stabilite` dans `Compteur`) est
+    # projeté sur la position lissée AUSSI, de sorte que `a_traverse` et le
+    # verrou décrivent la même trajectoire. C'est ce qui rend K>1 utilisable.
+    # Avant cet alignement, le verrou lisait la position BRUTE : le
+    # franchissement lissé arrivait une demi-fenêtre trop tard, `_cotes` était
+    # déjà passé à -1, et le verrou rejetait — la marche de référence passait
+    # de 1 (K=1) à 0 (K=5, 10, 20). Voir le rapport de tâche 6, section 4.4,
+    # et `tests/test_lissage.py::test_une_fenetre_quelconque_ne_casse_pas_la_marche_de_reference`.
     fenetre_lissage: int = 1
 
     def vers_dict(self) -> dict:

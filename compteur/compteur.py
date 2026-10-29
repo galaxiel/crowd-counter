@@ -301,7 +301,18 @@ class Compteur:
             # le marquage d'arrivée ci-dessous et, plus bas, l'écriture de
             # `_cotes`. Les dupliquer coûterait un calcul de projection par
             # track par frame pour rien.
-            cote = ligne.point_du_cote(t.center) if ligne is not None else 0
+            #
+            # Il est projeté sur la position LISSEE, pas sur la position
+            # brute : c'est la condition pour que `a_traverse` (qui, lui,
+            # porte sur la position lissée) et le verrou anti-rebond
+            # décrivent la MÊME trajectoire dans le temps. Lisser le
+            # franchissement sans lisser le côté décale les deux d'une
+            # demi-fenêtre — au moment où le croisement lissé est détecté, la
+            # position brute est déjà passée de l'autre côté, `_cotes` vaut
+            # -1, et le verrou REJETTE le franchissement. Mesuré avant ce
+            # correctif : la marche de référence comptait 1 à K=1 mais 0 à
+            # K=5, 10 et 20.
+            cote = ligne.point_du_cote(position) if ligne is not None else 0
 
             # Marquage des tracks arrivés, AVANT tout `continue`. Il doit l'être
             # pour tous, y compris ceux déjà comptés : ce sont eux les plus

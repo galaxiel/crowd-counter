@@ -7,7 +7,8 @@ médiane**, alors que le mouvement réel est de ~0,7 px/frame : le mouvement
 est noyé dans le bruit du détecteur.
 
 Le correctif testé ici est une moyenne mobile des K dernières positions du
-track (`Config.fenetre_lissage`, K=10 par défaut, K=1 = mode « brut »).
+track (`Config.fenetre_lissage`, K=1 par défaut, soit le mode « brut » ;
+K>1 lisse).
 
 Deux propriétés sont vérifiées, et il faut les distinguer :
 
@@ -82,16 +83,6 @@ def compteur(scenario, **kw):
         )
     )
     return c
-
-
-# Motif du défaut connu décrit dans le rapport de tâche : le verrou
-# anti-rebond lit le côté de la position BRUTE alors que `a_traverse` lit
-# la position lissée. Les deux trajectoires ne coïncident plus, et le
-# lissage fait perdre des franchissements qui fonctionnaient.
-_MOTIF_VERROU_NON_ALIGNE = (
-    "verrou anti-rebond non aligné sur la position lissée : le "
-    "franchissement lissé est détecté après que _cotes vaut déjà -1"
-)
 
 
 def marcher(x0, pas, ecart_type, n, graine):
@@ -268,29 +259,24 @@ def test_fenetre_lissage_par_defaut_est_le_mode_brut():
 def test_une_fenetre_quelconque_ne_casse_pas_la_marche_de_reference(k):
     """Invariant attendu du lissage : la marche de référence compte 1 fois.
 
-    Ce test MARQUE le défaut connu le plus important de cette tâche. Pour
-    K>1 il est marqué `xfail` : avec le verrou anti-rebond inchangé — il lit
-    le côté de la position BRUTE alors que `a_traverse` lit la position
-    lissée — les deux ne décrivent plus la même trajectoire, et le lissage
-    fait PERDRE des franchissements qui fonctionnaient.
+    Ce test MARQUAIT le défaut connu le plus important de l'algorithme de
+    lissage : le verrou anti-rebond lisait le côté de la position BRUTE alors
+    que `a_traverse` porte sur la position LISSEE. Les deux ne décrivaient
+    donc plus la même trajectoire dans le temps, et le lissage faisait PERDRE
+    des franchissements qui fonctionnaient.
 
-    Mesuré (voir le rapport de tâche) :
+    Mesuré avant le correctif :
 
         K=1  → 1 comptage   (correct)
         K=5  → 0
         K=10 → 0
         K=20 → 0
 
-    Le correctif est de faire lire `_cotes` / `_stabilite` à la position
-    lissée elle aussi ; mesuré, la variante rend REFERENCE, marche_5px,
-    marche_20px et marche_80px correctes à toutes les fenêtres K=1..20.
-
-    Le marqueur `pytest.xfail` rend le défaut VISIBLE sans casser la suite :
-    le jour où le verrou sera aligné, ce test XPASSera, et il faudra retirer
-    le marqueur. Un défaut documenté ne peut pas disparaître en silence.
+    Le correctif — projeter `_cotes` / `_stabilite` sur la position lissée
+    elle aussi — rend la marche correcte à toutes les fenêtres. Vérifié ici :
+    K=1, 5, 10 et 20 comptent tous 1. Le test ne porte plus de marqueur
+    `xfail` : il éprouve le comportement attendu.
     """
-    if k > 1:
-        pytest.xfail(_MOTIF_VERROU_NON_ALIGNE)
     xs = [100.0, 200.0, 300.0, 340.0, 400.0, 460.0, 520.0]
     c = compteur(
         [[t(1, x)] for x in xs],
