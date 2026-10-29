@@ -430,30 +430,7 @@ def test_la_barre_ne_recule_jamais():
     assert pcts[-1] == 100
 
 
-def test_la_barne_ne_dit_pas_termine_tant_que_torch_est_inconnu():
-    """100 % avant que torch ne soit annoncé = « terminé » alors qu'il reste 2,4 Go.
-
-    Sans le total mesuré en amont, `uv` annonçant les paquets au fur et à
-    mesure, le ratio des petits paquets seuls vaut 100 % — et la barre
-    annonce la fin du téléchargement au tout début.
-    """
-    suivi = tl._SuiviTelechargement(int(2.4 * 1024**3))
-    p = suivi.ligne("Downloading numpy (12.0MiB)")
-    assert p is not None
-    assert p.pourcent < 100, "la barre ne doit pas se remplir à 100 % si tôt"
-
-
-def test_fait_ne_depasse_pas_total():
-    """`fait <= total` doit toujours tenir : un ratio > 1 casserait l'affichage."""
-    suivi = tl._SuiviTelechargement()
-    for ligne in ("Downloading torch (2.4GiB)", "Downloaded torch"):
-        p = suivi.ligne(ligne)
-        assert p is not None
-        assert p.fait <= p.total, f"{p.fait} > {p.total}"
-        assert 0.0 <= p.fraction <= 1.0
-
-
-def test_la_barne_ne_dit_pas_termine_tant_que_torch_est_inconnu():
+def test_la_barre_ne_dit_pas_termine_tant_que_torch_est_inconnu():
     """100 % avant que torch ne soit annoncé = « terminé » alors qu'il reste 2,4 Go.
 
     Sans le total mesuré en amont, `uv` annonçant les paquets au fur et à
