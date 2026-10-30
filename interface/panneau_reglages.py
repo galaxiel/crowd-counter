@@ -716,7 +716,18 @@ class PanneauReglages(QWidget):
         self._btn_defauts = QPushButton("Valeurs par défaut")
         self._btn_defauts.clicked.connect(self._on_defauts)
         h.addWidget(self._btn_defauts)
+        # Retour visible des trois boutons. Sans lui, « Charger ce profil »
+        # sur un nom mal tapé ne renvoyait QUE dans le log — l'opérateur
+        # croyait le profil chargé pendant que rien ne s'était passé.
+        self._etat_profil = QLabel("")
+        self._etat_profil.setWordWrap(True)
+        self._etat_profil.setObjectName("etatProfil")
+        h.addWidget(self._etat_profil)
         return g
+
+    def _dire(self, message: str) -> None:
+        """Affiche un retour d'action dans le groupe Profils."""
+        self._etat_profil.setText(message)
 
     # -- API publique ----------------------------------------------------
 
@@ -1098,11 +1109,30 @@ class PanneauReglages(QWidget):
 
     def _on_enregistrer(self) -> None:
         nom = self._nom_profil.currentText().strip()
-        if nom:
-            self.enregistrer_profil(nom)
+        if not nom:
+            self._dire("Donne un nom au profil avant de l'enregistrer.")
+            return
+        chemin = self.enregistrer_profil(nom)
+        self._dire(f"Profil « {nom} » enregistré ({chemin.name}).")
 
     def _on_charger(self) -> None:
-        self.charger_profil(self._nom_profil.currentText().strip())
+        nom = self._nom_profil.currentText().strip()
+        if not nom:
+            self._dire("Choisis ou tape le nom d'un profil à charger.")
+            return
+        if self.charger_profil(nom):
+            self._dire(f"Profil « {nom} » chargé.")
+            return
+        # Deux échecs bien différents pour l'opérateur : un nom qui n'existe
+        # pas, et un fichier écrit à la main qui ne se relit pas. Le log les
+        # distingue déjà ; l'écran doit faire autant.
+        if (DOSSIER_PROFILS / f"{nom}.json").exists():
+            self._dire(
+                f"Profil « {nom} » illisible — vérifie le JSON de "
+                f"{DOSSIER_PROFILS / (nom + '.json')}."
+            )
+        else:
+            self._dire(f"Profil « {nom} » introuvable dans {DOSSIER_PROFILS}.")
 
     def _on_defauts(self) -> None:
         """Reprend `config/default.json`, en conservant la ligne tracée.
@@ -1112,3 +1142,4 @@ class PanneauReglages(QWidget):
         """
         defauts = copier_config(Config.defauts(), ligne=self._config.ligne)
         self.appliquer(defauts)
+        self._dire("Valeurs par défaut appliquées.")

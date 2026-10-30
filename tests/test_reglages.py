@@ -291,6 +291,80 @@ def test_profils_par_defaut_vont_dans_config_profils(application, monkeypatch, t
     assert PanneauReglages(Config()).charger_profil("defaut") is True
 
 
+# -- Retour visible des boutons de profil -----------------------------------
+#
+# Avant, les trois boutons ne renvoyaient QUE dans le log : charger un nom
+# mal tapé ne produisait aucun changement visible, et l'opérateur croyait
+# son profil chargé.
+
+
+def test_enregistrer_profil_affiche_la_confirmation(application, monkeypatch, tmp_path):
+    import interface.panneau_reglages as module
+
+    monkeypatch.setattr(module, "DOSSIER_PROFILS", tmp_path / "profils")
+    p = PanneauReglages(Config())
+    p._nom_profil.setCurrentText("scene-journee")
+    p._on_enregistrer()
+    assert "scene-journee" in p._etat_profil.text()
+    assert "nregistr" in p._etat_profil.text()  # « enregistré » sans le libellé exact
+
+
+def test_enregistrer_sans_nom_dit_ce_qu_il_manque(application):
+    p = PanneauReglages(Config())
+    p._nom_profil.setCurrentText("   ")
+    p._on_enregistrer()
+    assert p._etat_profil.text().strip(), "un retour est attendu, pas un champ vide"
+    assert "nom" in p._etat_profil.text().lower()
+
+
+def test_charger_profil_inconnu_le_dit_sans_echec_silencieux(
+    application, monkeypatch, tmp_path
+):
+    """Un nom inexistant doit être DIT à l'écran, pas seulement loggé."""
+    import interface.panneau_reglages as module
+
+    monkeypatch.setattr(module, "DOSSIER_PROFILS", tmp_path / "profils")
+    p = PanneauReglages(Config())
+    p._nom_profil.setCurrentText("quiestla")
+    p._on_charger()
+    assert "introuvable" in p._etat_profil.text().lower()
+
+
+def test_charger_profil_corrompu_le_dit_différemment_d_un_inconnu(
+    application, monkeypatch, tmp_path
+):
+    """Deux échecs distincts : fichier absent vs fichier illisible."""
+    import interface.panneau_reglages as module
+
+    dossier = tmp_path / "profils"
+    dossier.mkdir(parents=True)
+    (dossier / "casse.json").write_text("{ pas du json", encoding="utf-8")
+    monkeypatch.setattr(module, "DOSSIER_PROFILS", dossier)
+    p = PanneauReglages(Config())
+    p._nom_profil.setCurrentText("casse")
+    p._on_charger()
+    assert "illisible" in p._etat_profil.text().lower()
+
+
+def test_charger_profil_valide_confirme_le_chargement(
+    application, monkeypatch, tmp_path
+):
+    import interface.panneau_reglages as module
+
+    monkeypatch.setattr(module, "DOSSIER_PROFILS", tmp_path / "profils")
+    p = PanneauReglages(Config())
+    p.enregistrer_profil("bon")
+    p._nom_profil.setCurrentText("bon")
+    p._on_charger()
+    assert "charg" in p._etat_profil.text().lower()
+
+
+def test_valeurs_par_defaut_annonce_leur_application(application):
+    p = PanneauReglages(Config())
+    p._on_defauts()
+    assert "défaut" in p._etat_profil.text().lower()
+
+
 # -- Signal -------------------------------------------------------------
 
 
