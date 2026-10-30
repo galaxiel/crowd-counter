@@ -49,19 +49,23 @@ def mesurer(
     fin: int,
     modele: str | None = None,
     fenetre_lissage: int = 1,
+    imgsz: int | None = None,
     verbose: bool = True,
 ) -> dict:
     """Décompte `fin - debut` frames par le chemin groupé, et chronomètre.
 
     Retourne un dict avec le compte, le nombre de frames réellement traitées,
-    le temps écoulé et le débit. ``modele``/``fenetre_lissage`` permettent de
-    tester une variable à la fois sans toucher au reste des défauts.
+    le temps écoulé et le débit. ``modele``/``fenetre_lissage``/``imgsz``
+    permettent de tester une variable à la fois sans toucher au reste des
+    défauts.
     """
     kwargs = {}
     if modele is not None:
         kwargs["modele"] = modele
     if fenetre_lissage != 1:
         kwargs["fenetre_lissage"] = fenetre_lissage
+    if imgsz is not None:
+        kwargs["taille_entree"] = int(imgsz)
     config = Config(ligne=LIGNE_REF, sens=-1, **kwargs)
 
     detecteur = Detecteur(charger_modele(config.modele, config.peripherique), config)
@@ -105,11 +109,17 @@ def mesurer(
     traitees = index - debut
     return {
         "total": compteur.total,
+        # Frames des franchissements, pour le banc de vérité terrain
+        # (`tools/verite_terrain.py comparer`) : un total seul ne dit pas OÙ
+        # le moteur a compté, et c'est précisément ce qui manque pour
+        # comparer à un comptage humain frame par frame.
+        "evenements": [ev.frame for ev in compteur.evenements],
         "frames": traitees,
         "secondes": ecoule,
         "ips": traitees / ecoule if ecoule > 0 else 0.0,
         "presents_max": compteur.presents_max,
         "modele": config.modele,
+        "imgsz": config.taille_entree,
         "segment": (debut, index),
     }
 
@@ -120,15 +130,17 @@ def main() -> None:
     parser.add_argument("fin", nargs="?", type=int, default=FIN_REF)
     parser.add_argument("--modele", default=None)
     parser.add_argument("--lissage", type=int, default=1)
+    parser.add_argument("--imgsz", type=int, default=None)
     args = parser.parse_args()
 
-    r = mesurer(VIDEO_REF, args.debut, args.fin, args.modele, args.lissage)
+    r = mesurer(VIDEO_REF, args.debut, args.fin, args.modele, args.lissage, args.imgsz)
     duree_video = r["frames"] / 30.0
     print(
         f"segment {r['segment'][0]}-{r['segment'][1]} "
         f"({r['frames']} frames, {duree_video:.1f} s de vidéo)"
     )
     print(f"modèle   : {r['modele']}")
+    print(f"imgsz    : {r['imgsz']}")
     print(f"lissage  : K={args.lissage}")
     print(f"COMPTÉ   : {r['total']} personnes")
     print(f"presents max : {r['presents_max']}")
