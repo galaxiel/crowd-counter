@@ -771,6 +771,71 @@ def test_le_lancer_signale_un_modele_absent_sans_vider_la_video(
     assert f.btn_lancer.isEnabled()  # on peut réessayer une fois le modèle là
 
 
+# -- Validation du modèle au CHARGEMENT de la vidéo -------------------------
+#
+# Avant, l'absence de `.pt` ne se révélait qu'au « Lancer » — après avoir
+# ouvert la vidéo et tracé la ligne. Le contrôle est remonté à l'ouverture.
+
+
+def test_charger_video_confirme_un_modele_present(
+    application, fenetre, video_synthetique, tmp_path
+):
+    """Modèle résoluble : le statut le dit, l'opérateur sait que Lancer marchera."""
+    f = fenetre
+    poids = tmp_path / "poids-test.pt"
+    poids.write_bytes(b"")  # le contrôle ne LIT que le nom, pas les poids
+    f.panneau._modele.setCurrentText(str(poids))
+    f.charger_video(str(video_synthetique))
+    statut = f.label_statut.text()
+    assert "poids-test.pt" in statut
+    assert "trouv" in statut.lower()
+    assert "introuvable" not in statut.lower()
+
+
+def test_charger_video_signale_un_modele_absent_avant_le_lancer(
+    application, fenetre, video_synthetique, tmp_path, monkeypatch
+):
+    """Le nom n'existe nulle part : dit-le DÈS l'ouverture de la vidéo.
+
+    Les dossiers de modèles sont patchés sur un `tmp_path` contenant un
+    `.pt` : le test doit afficher « introuvable » partout, y compris sur une
+    machine CI sans aucun poids — sinon le message basculerait vers celui
+    d'une installation neuve et le test ne vérifierait plus la même branche.
+    """
+    import interface.app as module_app
+
+    poids = tmp_path / "modeles"
+    poids.mkdir()
+    (poids / "present.pt").write_bytes(b"")
+    monkeypatch.setattr(module_app, "dossiers_modeles", lambda: (poids,))
+    f = fenetre
+    f.panneau._modele.setCurrentText("fichier_absent_xyz.pt")
+    assert f.charger_video(str(video_synthetique)) is True  # la vidéo s'ouvre
+    statut = f.label_statut.text()
+    assert "fichier_absent_xyz.pt" in statut
+    assert "introuvable" in statut.lower()
+    assert f.cap is not None, "la vidéo ne doit pas être refusée pour un modèle"
+
+
+def test_charger_video_dit_ou_deposer_un_pt_sur_une_installation_neuve(
+    application, fenetre, video_synthetique, monkeypatch
+):
+    """Aucun `.pt` sur tout le poste : le message dit OÙ déposer les poids.
+
+    C'est le cas d'une installation neuve — le dépôt ne versionne pas les
+    poids (`.gitignore`), et rien n'indiquait jusque-là où les mettre.
+    """
+    import interface.app as module_app
+
+    monkeypatch.setattr(module_app, "dossiers_modeles", lambda: ())
+    f = fenetre
+    f.panneau._modele.setCurrentText("fantome.pt")
+    f.charger_video(str(video_synthetique))
+    statut = f.label_statut.text()
+    assert "aucun modèle" in statut.lower()
+    assert "modeles/" in statut
+
+
 # -- Avertissement « 0 compté : vérifie le sens » ------------------------
 #
 # Le cas testé ici est LE piège de l'outil : sur la vidéo de référence,

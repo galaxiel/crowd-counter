@@ -58,8 +58,10 @@ from compteur.config import (
     DUREE_BOITE_COMPTEE_FRAMES,
     MODE_MANUEL,
     Config,
+    dossiers_modeles,
     mode_peripherique,
     mode_resolution,
+    resoudre_modele,
 )
 from compteur.detecteur import (
     Detecteur,
@@ -586,9 +588,47 @@ class FenetrePrincipale(QMainWindow):
         self.label_statut.setText(
             f"{p.name} — {largeur}×{hauteur}, {nb_frames} frames à {fps:.0f} i/s.\n"
             f"Analysée à {analyse} px. Trace la ligne, puis lance."
+            + self._etat_du_modele()
         )
         self._maj_boutons()
         return True
+
+    def _etat_du_modele(self) -> str:
+        """Ligne ajoutée au statut : le modèle choisi est-il déjà sur le disque ?
+
+        Le contrôle a lieu AU CHARGEMENT DE LA VIDÉO et non au lancement :
+        sans lui, un `.pt` absent ne se révélait qu'après que l'opérateur a
+        ouvert la vidéo, tracé la ligne et cliqué « Lancer » — pour se voir
+        refuser le décompte, en conservant certes la vidéo et la ligne, mais
+        après tout le travail de préparation.
+
+        Trois états, et un seul est bon : trouvé ; introuvable alors que des
+        poids existent (un nom tapé à la main, un fichier déplacé) ; aucun
+        poids sur tout le poste — le cas d'une installation neuve, où le
+        dépôt ne contient pas les `.pt` et où rien n'indiquait jusque-là où
+        les déposer.
+        """
+        modele = self.config.modele
+        if not modele:
+            return "\nAucun modèle choisi — ouvre les réglages pour en choisir un."
+        if resoudre_modele(modele) is not None:
+            return f"\nModèle {modele} — trouvé, prêt pour le lancement."
+        poids = [
+            p.name
+            for dossier in dossiers_modeles()
+            if dossier.is_dir()
+            for p in sorted(dossier.glob("*.pt"))
+        ]
+        if not poids:
+            return (
+                "\nAucun modèle sur ce poste : dépose un fichier .pt dans le "
+                "dossier « modeles/ », puis choisis-le dans les réglages."
+            )
+        ou = "un modèle" if len(poids) == 1 else f"{len(poids)} modèles"
+        return (
+            f"\nModèle « {modele} » introuvable — {ou} disponible(s) sur ce "
+            "poste : choisis-le dans les réglages (champ « Modèle »)."
+        )
 
     def _resolution_analyse_pour(self, cap) -> int:
         """Résolution d'analyse retenue pour la vidéo ouverte, et appliquée.
