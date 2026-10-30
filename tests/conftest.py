@@ -18,6 +18,49 @@ if str(RACINE) not in sys.path:
     sys.path.insert(0, str(RACINE))
 
 
+@pytest.fixture(scope="session", autouse=True)
+def fermeture_qt_protegee():
+    """Détruit la QApplication dans un ordre maîtrisé, avant la sortie.
+
+    PySide6 sur Linux (CI, `QT_QPA_PLATFORM=offscreen`) segfault à la
+    fermeture de l'INTERPRÉTEUR si on laisse le GC finaliser les objets Qt
+    dans un ordre arbitraire : « QObject: shared QObject was deleted
+    directly », puis SIGSEGV — code de sortie 139 alors que TOUS les tests
+    sont passés. Le crash n'est donc pas un échec de test : c'est la
+    destruction des restes Qt au moment de quitter Python.
+
+    Ici, une seule fenêtre de premier niveau reste vivante en fin de session
+    (le `QApplication.instance()` partagé et les widgets des tests). On ferme
+    et on supprime les top-level widgets PENDANT la session, quand l'ordre
+    de destruction est encore le nôtre, puis on quitte l'événement — la
+    sortie de l'interpréteur ne trouve plus rien à détruire.
+
+    Sur Windows, cette destruction ordonnée est tout aussi valide : Qt
+    n'autorise qu'une QApplication par process, les widgets fermés ici ne
+    servent plus personne.
+    """
+    yield
+    try:
+        from PySide6.QtWidgets import QApplication
+    except ImportError:
+        return  # PySide6 absent : rien à fermer
+    app = QApplication.instance()
+    if app is None:
+        return
+    for fenetre in app.topLevelWidgets():
+        fenetre.close()
+        fenetre.deleteLater()
+    app.processEvents()
+    # `deleteLater()` n'est consommé QUE par une boucle d'événements qui
+    # se rendrait au retour du posteur ; `processEvents()` ne garantit pas
+    # les suppressions différées. `sendPostedEvents(None, DeferredDelete)`
+    # les vide explicitement — sans quoi les widgets survivraient encore à
+    # la session, exactement le scénario de crash.
+    from PySide6.QtCore import QEvent, QCoreApplication
+
+    QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+
+
 @pytest.fixture(autouse=True)
 def memoire_video_isolee(tmp_path, monkeypatch):
     """La mémoire du dernier dossier vidéo reste DANS le test.
