@@ -551,6 +551,90 @@ def test_arreter_ne_plante_pas_sans_video(application, fenetre):
     assert fenetre._en_analyse is False
 
 
+# -- Raccourcis clavier ------------------------------------------------------
+#
+# Un opérateur de terrain travaille au gant : la souris n'est pas toujours
+# utilisable. Les raccourcis doivent exister et appeler les MÊMES slots que
+# les boutons — une seule logique d'action, pas deux.
+
+
+def _raccourcis(fenetre):
+    from PySide6.QtGui import QShortcut
+
+    return {r.key().toString(): r for r in fenetre.findChildren(QShortcut)}
+
+
+def test_les_raccourcis_clavier_sont_installes(application, fenetre):
+    """Espace/Entrée/Échap/S/Ctrl+O/→ sont branchés sur la fenêtre."""
+    cles = _raccourcis(fenetre)
+    # Qt rend `Key_Escape` sous le nom « Esc » — le raccourci répond bien à
+    # la touche Échap, c'est seulement son libellé `toString()` qui diffère.
+    attendues = {"Space", "Return", "Enter", "Esc", "S", "Right", "Ctrl+O"}
+    assert attendues <= set(cles), f"manquants : {attendues - set(cles)}"
+
+
+def test_espace_bascule_la_pause_comme_le_bouton(application, fenetre):
+    """Le raccourci appelle le slot du bouton, il ne duplique pas sa logique."""
+    from PySide6.QtGui import QShortcut
+
+    cles = _raccourcis(fenetre)
+    appels = []
+    # On intercepte l'activation : on veut prouver le BRANCHEMENT, pas
+    # rejouer la logique de pause (celle-ci est couverte ailleurs).
+    original = fenetre._basculer_pause
+    fenetre._basculer_pause = lambda: appels.append(1)
+    try:
+        cles["Space"].activated.emit()
+    finally:
+        fenetre._basculer_pause = original
+    assert appels == [1]
+
+
+def test_echap_annule_un_trace_en_cours(application, fenetre):
+    """Un premier point posé au mauvais endroit ne doit pas bloquer l'opérateur."""
+    f = fenetre
+    f._on_tracer_ligne()
+    f._points_ligne = [(10, 10)]
+    f._annuler_trace()
+    assert f._points_ligne == []
+    assert f._trace_arme is False
+
+
+def test_pas_de_frame_sans_session_ne_fait_rien(application, fenetre):
+    """→ hors analyse : rien à lire, et surtout pas de plantage."""
+    fenetre._pas_de_frame()
+    assert fenetre.frames == 0
+
+
+def test_pas_de_frame_pendant_l_analyse_ne_derange_pas_le_flux(
+    application, fenetre, video_synthetique
+):
+    """Le flux avance tout seul : un pas manuel ne doit pas s'y substituer."""
+    f = fenetre
+    f.charger_video(str(video_synthetique))
+    f.compteur = FauxCompteur()
+    f._ouvrir_session()
+    f._timer_traitement.start()
+    avant = f.frames
+    f._pas_de_frame()
+    assert f.frames == avant, "le pas manuel doit être ignoré en analyse"
+
+
+def test_pas_de_frame_avance_d_une_frame_en_pause(
+    application, fenetre, video_synthetique
+):
+    """À la pause, → lit et traite UNE frame, puis l'affiche."""
+    f = fenetre
+    f.charger_video(str(video_synthetique))
+    f.compteur = FauxCompteur()
+    f._ouvrir_session()
+    f._basculer_pause()  # ouvre la session en pause (timer non démarré)
+    avant = f.frames
+    f._pas_de_frame()
+    assert f.frames == avant + 1
+    assert f._resultat_courant is not None, "la frame lue doit être traitée"
+
+
 def test_fermer_la_fenetre_libere_la_video(application, fenetre, video_synthetique):
     """Une `VideoCapture` non libérée tient le fichier ouvert sous Windows."""
     f = fenetre

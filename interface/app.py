@@ -35,7 +35,7 @@ import pathlib
 
 import cv2
 from PySide6.QtCore import QTimer, QUrl, Qt
-from PySide6.QtGui import QDesktopServices
+from PySide6.QtGui import QDesktopServices, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QApplication,
     QFileDialog,
@@ -422,6 +422,7 @@ class FenetrePrincipale(QMainWindow):
         self.btn_pause.clicked.connect(self._basculer_pause)
         self.btn_stop.clicked.connect(self.arreter)
         self.btn_soutenir.clicked.connect(self._on_soutenir)
+        self._installer_raccourcis()
         self.video.clic.connect(self._on_clic_video)
         self.video.deplacement.connect(self._on_deplacement_video)
         self.video.deplacement_fini.connect(self._on_deplacement_fini)
@@ -690,6 +691,91 @@ class FenetrePrincipale(QMainWindow):
         return fps
 
     # -- Actions : la ligne ----------------------------------------------
+
+    def _installer_raccourcis(self) -> None:
+        """Branche les raccourcis clavier de la fenêtre.
+
+        Un opérateur de terrain travaille au gant, parfois sans souris
+        précise : Espace pour la pause, Entrée pour lancer, Échap pour
+        annuler un tracé raté, → pour avancer frame par frame en pause. Chaque
+        raccourci appelle le MÊME slot que le bouton correspondant — il n'y a
+        qu'une logique d'action, pas deux.
+
+        → n'est branché qu'à la pause : en analyse, le flux avance tout seul.
+        Le recul (←) n'existe pas — le compteur est séquentiel et étatique,
+        on ne peut pas « dé-compter » une frame déjà traitée.
+        """
+        raccourcis = [
+            (QKeySequence(Qt.Key.Key_Space), self._basculer_pause),
+            (QKeySequence(Qt.Key.Key_Return), self.lancer),
+            (QKeySequence(Qt.Key.Key_Enter), self.lancer),
+            (QKeySequence(Qt.Key.Key_Escape), self._annuler_trace),
+            (QKeySequence("Ctrl+O"), self._on_charger_video),
+            (QKeySequence(Qt.Key.Key_S), self.arreter),
+        ]
+        for touche, action in raccourcis:
+            raccourci = QShortcut(touche, self)
+            # `WidgetWithChildrenShortcut` : la touche fonctionne même quand
+            # le focus est sur un champ de réglage — sinon il faudrait
+            # cliquer ailleurs avant chaque raccourci.
+            raccourci.setContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
+            raccourci.activated.connect(action)
+        pas = QShortcut(QKeySequence(Qt.Key.Key_Right), self)
+        pas.setContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
+        pas.activated.connect(self._pas_de_frame)
+
+    def _annuler_trace(self) -> None:
+        """Annule un tracé de ligne en cours (Échap).
+
+        Réinitialise l'état du tracé comme s'il n'avait jamais commencé :
+        sans cela, un premier point posé au mauvais endroit laissait
+        l'opérateur bloqué, la seule issue étant de re-cliquer « Tracer la
+        ligne ».
+        """
+        if self._en_analyse:
+            return
+        self._points_ligne = []
+        self._apercu_point = None
+        self._trace_arme = False
+        self._rafraichir_affichage()
+        self._maj_boutons()
+        if self.ligne is not None:
+            self.label_statut.setText(
+                "Ligne conservée. « Tracer la ligne » pour en redessiner une."
+            )
+        else:
+            self.label_statut.setText(
+                "Tracé annulé. Clique « Tracer la ligne » pour recommencer."
+            )
+
+    def _pas_de_frame(self) -> None:
+        """ traite et affiche UNE frame de plus, à la pause (→).
+
+        Le comptage normal est groupé par `TAILLE_LOT_DETECTION`, mais un
+        pas manuel n'a de sens que frame par frame : on lise et traite une
+        seule frame via `traiter_frame`, dont la logique est EXACTEMENT
+        celle de `traiter_lot` (même `_integrer`). Ne fait RIEN si l'analyse
+        tourne : le flux avance déjà tout seul.
+        """
+        if self._en_analyse or not self._session_ouverte:
+            return
+        if self.cap is None or self.compteur is None:
+            return
+        ok, img = self.cap.read()
+        if not ok:
+            # Fin de vidéo : même comportement que le flux normal.
+            self.arreter()
+            self._afficher_bilan()
+            return
+        index = self.frames
+        ts = index / self._fps()
+        self.frames += 1
+        if hasattr(self.compteur, "traiter_frame"):
+            resultat = self.compteur.traiter_frame(img, index, ts)
+        else:
+            resultat = self.compteur.traiter_lot([(img, index, ts)])[0]
+        self._resultat_courant = resultat
+        self._afficher()
 
     def _on_tracer_ligne(self) -> None:
         """Arme le tracé : le prochain clic pose le premier point."""
