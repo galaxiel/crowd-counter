@@ -354,6 +354,25 @@ class Detecteur:
         return {i: str(n) for i, n in enumerate(noms)}
 
 
+def message_modele_absent(chemin: str) -> str:
+    """Message actionnable d'un modèle introuvable, à part pour deux raisons.
+
+    L'IHM valide le chemin AVANT de lancer son thread de chargement — un
+    `.pt` absent doit être dit sans asynchronisme — et doit formuler la
+    MÊME erreur que :func:`charger_modele`, sans avoir à la provoquer. Le
+    message liste les dossiers réellement balayés (`dossiers_modeles()`,
+    appelé à chaque affichage) : une copie en dur divergerait au premier
+    changement d'installation.
+    """
+    cherches = "\n".join(f"  - {d}" for d in dossiers_modeles())
+    return (
+        f"modèle introuvable : {chemin}\n"
+        f"Cherché tel quel, puis dans :\n{cherches}\n"
+        "Dépose le fichier .pt dans « modeles/ », ou choisis-le avec le "
+        "bouton « Parcourir… » des réglages."
+    )
+
+
 def charger_modele(chemin: str, peripherique: str = PERIPHERIQUE_AUTO):
     """Charge un modèle YOLO depuis le disque, sur le périphérique demandé.
 
@@ -372,13 +391,7 @@ def charger_modele(chemin: str, peripherique: str = PERIPHERIQUE_AUTO):
     """
     p = resoudre_modele(chemin)
     if p is None:
-        cherches = "\n".join(f"  - {d}" for d in dossiers_modeles())
-        raise FileNotFoundError(
-            f"modèle introuvable : {chemin}\n"
-            f"Cherché tel quel, puis dans :\n{cherches}\n"
-            "Dépose le fichier .pt dans « modeles/ », ou choisis-le avec le "
-            "bouton « Parcourir… » des réglages."
-        )
+        raise FileNotFoundError(message_modele_absent(chemin))
     if p.suffix.lower() not in FORMATS_MODELES:
         raise ValueError(
             f"format de modèle non supporté : {p.suffix} "

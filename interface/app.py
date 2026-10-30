@@ -36,7 +36,7 @@ import pathlib
 import time
 
 import cv2
-from PySide6.QtCore import QTimer, QUrl, Qt
+from PySide6.QtCore import QObject, QThread, QTimer, QUrl, Qt, Signal
 from PySide6.QtGui import QDesktopServices, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QApplication,
@@ -68,6 +68,7 @@ from compteur.config import (
 from compteur.detecteur import (
     Detecteur,
     charger_modele,
+    message_modele_absent,
     peripherique_effectif,
 )
 from compteur.ligne import Ligne
@@ -192,6 +193,31 @@ AVERTISSEMENT_SENS = (
 )
 
 
+class _ChargementModele(QObject):
+    """Charge les poids HORS du fil de l'IHM.
+
+    Monter un modèle medium coûte plusieurs secondes (lecture disque + mise
+    en mémoire, GPU compris) : sur le fil de l'IHM, il gelait la fenêtre —
+    Stop et fermeture compris. Le motif est celui de `interface.demarrage` :
+    un `QObject` déplacé dans un `QThread`, qui émet SON RÉSULTAT OU SON
+    EXCEPTION sur `fini` — un échec doit ARRIVER à l'opérateur, pas tuer le
+    thread en silence.
+    """
+
+    fini = Signal(object)
+
+    def __init__(self, modele: str, peripherique: str) -> None:
+        super().__init__()
+        self._modele = modele
+        self._peripherique = peripherique
+
+    def run(self) -> None:
+        try:
+            self.fini.emit(charger_modele(self._modele, self._peripherique))
+        except BaseException as exc:  # noqa: BLE001 — remonter l'échec est le contrat
+            self.fini.emit(exc)
+
+
 class FenetrePrincipale(QMainWindow):
     """La fenêtre : vidéo à gauche, compteur et réglages à droite."""
 
@@ -230,6 +256,21 @@ class FenetrePrincipale(QMainWindow):
         #: décompté du débit : 10 minutes d'arrêt ne doivent pas afficher un
         #: « 2 i/s » qui décrit l'inactivité de l'opérateur, pas le moteur.
         self._pause_debut: float | None = None
+        #: Un chargement de modèle tourne dans son thread. Drapeau
+        #: d'unicité : un second « Lancer » pendant ce temps est ignoré,
+        #: et l'activation des boutons s'y aligne (Stop reste actif —
+        #: c'est par lui qu'on annule le chargement).
+        self._chargement_en_cours = False
+        #: `(modèle, périphérique)` que le thread en cours est censé livrer.
+        #: Un résultat qui ne correspond plus — réglages modifiés en route,
+        #: chargement annulé puis relancé sur un autre modèle — est JETÉ,
+        #: jamais monté : il compterait avec des poids que l'écran ne
+        #: annonce pas.
+        self._chargement_demande: tuple[str, str] = ()
+        #: Le thread et son worker : le worker doit rester référencé tant
+        #: que son thread tourne (sinon Python le détruirait en marche).
+        self._thread_modele: QThread | None = None
+        self._worker_modele: _ChargementModele | None = None
         #: L'avertissement « 0 compté » a déjà été montré pour CETTE analyse.
         #: Vrai une fois, remis à faux à chaque nouveau comptage.
         self._avertissement_sens_affiche = False
@@ -1177,8 +1218,18 @@ class FenetrePrincipale(QMainWindow):
     # -- Actions : la lecture --------------------------------------------
 
     def lancer(self) -> None:
-        """Démarre l'analyse. Ne charge le modèle qu'ici, jamais au démarrage."""
+        """Démarre l'analyse. Ne charge le modèle qu'ici, jamais au démarrage.
+
+        Le chargement des poids — plusieurs secondes — part dans un THREAD :
+        fait sur le fil de l'IHM, il figerait la fenêtre, Stop et fermeture
+        compris. Seule sa VALIDATION (une lecture de disque, une microseconde)
+        reste synchrone, pour qu'un modèle absent soit dit sans dépendre de
+        la livraison d'un résultat asynchrone.
+        """
         if self.cap is None or self.ligne is None or self._en_analyse:
+            return
+        if self._chargement_en_cours:
+            # Double-clic ou Entrée maintenue : un seul chargement à la fois.
             return
 
         # Un réglage peut avoir bougé depuis le dernier « Lancer » : on
@@ -1187,13 +1238,135 @@ class FenetrePrincipale(QMainWindow):
         self.config.ligne = self._ligne_en_tuple()
         self._reconstruire_ligne_depuis_config()
 
-        try:
-            if self.detecteur is None:
-                log.info("chargement du modèle %s", self.config.modele)
-                self.detecteur = Detecteur(
-                    charger_modele(self.config.modele, self.config.peripherique),
-                    self.config,
+        if self.detecteur is None:
+            self._demarrer_chargement()
+            return
+        self._demarrer_analyse()
+
+    def _demarrer_chargement(self) -> None:
+        """Valide le modèle, puis le charge dans un thread.
+
+        La validation est la MÊME que celle de `charger_modele`
+        (`resoudre_modele`, sans torch ni ultralytics) : un `.pt` absent ou
+        un nom tapé à la main est dit tout de suite, en synchrone, avec le
+        message exact que le chargement aurait levé. Seul le chargement
+        lourd — lecture des poids + mise en mémoire torch — part en thread.
+        """
+        modele, peripherique = self.config.modele, self.config.peripherique
+        if resoudre_modele(modele) is None:
+            self._signaler(
+                "Démarrage impossible",
+                message_modele_absent(modele)
+                + "\n\nLa vidéo et la ligne sont conservées.",
+                grave=True,
+            )
+            self._maj_boutons()
+            return
+
+        demande = (modele, peripherique)
+        ancien = self._thread_modele
+        if ancien is not None:
+            if ancien.isRunning():
+                if self._chargement_demande == demande:
+                    # Chargement annulé par erreur (Stop) puis relancé à
+                    # l'identique : le résultat du thread qui tourne est
+                    # EXACTEMENT celui qu'on attend — on le réarmer plutôt
+                    # que de monter deux fois les mêmes poids.
+                    self._chargement_en_cours = True
+                    self.label_statut.setText(f"Chargement du modèle {modele}…")
+                    self._maj_boutons()
+                    return
+                # Un AUTRE modèle est en route : on ne remplace jamais un
+                # QThread en fonctionnement, et doubler deux chargements
+                # torch sur le même GPU ne ferait que ralentir les deux.
+                self._signaler(
+                    "Chargement déjà en cours",
+                    "Un autre chargement de modèle est en cours — réessaie "
+                    "dans une seconde.",
                 )
+                self._maj_boutons()
+                return
+            ancien.quit()
+            ancien.wait(5000)
+            if ancien.isRunning():
+                # Quasi impossible (il ne tournait pas) : on ne remplace
+                # JAMAIS un QThread vivant — la référence reste en place, le
+                # prochain « Lancer » le reverra en cours et réessaiera.
+                self._signaler(
+                    "Chargement déjà en cours",
+                    "Le chargement précédent n'a pas fini — réessaie dans "
+                    "une seconde.",
+                )
+                self._maj_boutons()
+                return
+            self._thread_modele = None
+            self._worker_modele = None
+
+        log.info("chargement du modèle %s (en thread)", modele)
+        self._chargement_en_cours = True
+        self._chargement_demande = demande
+        self.label_statut.setText(
+            f"Chargement du modèle {modele}… La fenêtre reste utilisable."
+        )
+        self._maj_boutons()
+
+        self._thread_modele = QThread()
+        self._worker_modele = _ChargementModele(modele, peripherique)
+        self._worker_modele.moveToThread(self._thread_modele)
+        self._thread_modele.started.connect(self._worker_modele.run)
+        self._worker_modele.fini.connect(self._modele_pret)
+        self._worker_modele.fini.connect(self._thread_modele.quit)
+        self._thread_modele.start()
+
+    def _modele_pret(self, chargement) -> None:
+        """Le thread a livré — un modèle, une exception, ou rien d'utile.
+
+        Trois filtres, dans l'ordre de leur probabilité, et seul un modèle
+        qui passe tout démarre l'analyse :
+
+        1. le chargement a été ANNULÉ entre-temps (Stop, nouvelle vidéo) :
+           le résultat est jeté silencieusement — l'appelant d'annulation
+           vient déjà d'écrire le statut, l'écraser le démentirait ;
+        2. le chargement a ÉCHOUÉ : signalé « Démarrage impossible », vidéo
+           et ligne conservées — exactement comme avant l'asynchrone ;
+        3. les réglages ont BOUGÉ en route : monter le modèle livré
+           donnerait une analyse pilotée par un réglage que l'écran ne
+           montre plus — on demande une relance.
+        """
+        if not self._chargement_en_cours:
+            log.info("chargement de modèle terminé mais annulé : jeté")
+            return
+        self._chargement_en_cours = False
+        if isinstance(chargement, BaseException):
+            self._signaler(
+                "Démarrage impossible",
+                f"{chargement}\n\nLa vidéo et la ligne sont conservées.",
+                grave=True,
+            )
+            self._maj_boutons()
+            return
+        choix = self.panneau.lire()
+        if (choix.modele, choix.peripherique) != self._chargement_demande:
+            self.label_statut.setText(
+                "Réglages modifiés pendant le chargement — relance pour les "
+                "appliquer."
+            )
+            self._maj_boutons()
+            return
+        self._demarrer_analyse(chargement)
+
+    def _demarrer_analyse(self, modele_charge=None) -> None:
+        """Monte le modèle reçu (s'il en est un), puis démarre les minuteries.
+
+        ``modele_charge`` est le poids fraîchement livré par le thread, ou
+        `None` quand le détecteur est déjà monté. Sa construction reste dans
+        le MÊME `try` que le reste du montage : un échec — modèle
+        incompatible, config refusée — est signalé « Démarrage impossible »
+        avec la vidéo et la ligne conservées, comme avant l'asynchrone.
+        """
+        try:
+            if modele_charge is not None:
+                self.detecteur = Detecteur(modele_charge, self.config)
                 self._modele_charge = self.config.modele
             if self.tracker is None:
                 self.tracker = Tracker(self.config)
@@ -1326,6 +1499,12 @@ class FenetrePrincipale(QMainWindow):
         cas où aucune analyse n'a eu lieu et où il n'y a rien à résumer.
         """
         analyse_engagee = self._session_ouverte
+        # Un chargement de modèle en route s'arrête aussi : plus rien
+        # n'attend son résultat (le prochain « Lancer » en relancera un,
+        # ou réarmera celui-ci s'il n'est pas fini).
+        if self._chargement_en_cours:
+            self._chargement_en_cours = False
+            self.label_statut.setText("Chargement du modèle annulé.")
         self._timer_traitement.stop()
         self._timer_affichage.stop()
         # Fin d'analyse : la ligne redevient déplaçable, bande comprise.
@@ -1379,11 +1558,16 @@ class FenetrePrincipale(QMainWindow):
         """
         video = self.cap is not None
         pret = video and self.ligne is not None
-        self.btn_video.setEnabled(not self._en_analyse)
-        self.btn_ligne.setEnabled(video and not self._en_analyse)
-        self.btn_lancer.setEnabled(pret and not self._en_analyse)
+        # Pendant un chargement, les trois gestes qui le rendraient caduc
+        # sont verrouillés (ouvrir une vidéo l'annule, tracer une ligne ou
+        # relancer le doublerait) ; Stop, lui, reste actif : c'est par lui
+        # qu'on annule un chargement.
+        chargement = self._chargement_en_cours
+        self.btn_video.setEnabled(not self._en_analyse and not chargement)
+        self.btn_ligne.setEnabled(video and not self._en_analyse and not chargement)
+        self.btn_lancer.setEnabled(pret and not self._en_analyse and not chargement)
         self.btn_pause.setEnabled(self._session_ouverte)
-        self.btn_stop.setEnabled(self._session_ouverte)
+        self.btn_stop.setEnabled(self._session_ouverte or chargement)
 
     # -- Boucle de lecture ------------------------------------------------
 
@@ -1682,9 +1866,25 @@ class FenetrePrincipale(QMainWindow):
         Sous Windows, une `VideoCapture` non libérée garde le fichier ouvert :
         la vidéo ne peut plus être déplacée ni supprimée tant que l'application
         tourne.
+
+        Un chargement de modèle en route est ANNULÉ puis attendu — borné.
+        Jamais un QThread détruit en marche (crash Qt garanti) ; jamais non
+        plus une attente infinie : un disque bloqué ne doit pas transformer
+        la fermeture en gel. La boucle réitère `quit()` parce qu'un `quit`
+        émis AVANT l'entrée du thread dans `exec()` est un no-op (détail
+        Qt) — et pompe les événements, sans quoi la livraison de `fini`
+        (qui commande l'arrêt) n'aurait jamais lieu.
         """
         self._timer_traitement.stop()
         self._timer_affichage.stop()
+        self._chargement_en_cours = False
+        thread = self._thread_modele
+        if thread is not None:
+            fin = time.monotonic() + 15.0
+            while thread.isRunning() and time.monotonic() < fin:
+                thread.quit()
+                QApplication.processEvents()
+                thread.wait(20)
         self._liberer_capture()
         super().closeEvent(event)
 

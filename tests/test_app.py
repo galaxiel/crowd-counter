@@ -24,6 +24,7 @@ Sans cette garde, un test qui provoke une erreur resterait bloqué sur un
 « OK » que personne ne peut cliquer.
 """
 
+import contextlib
 import os
 import time
 
@@ -120,6 +121,107 @@ def avancer(fenetre, n=1):
     for _ in range(n):
         fenetre._tick()
         fenetre._afficher()
+
+
+def moteur_sans_poids(monkeypatch):
+    """Les cinq détournements qui font tourner `lancer` sans poids réels.
+
+    `resoudre_modele` passe en premier : la validation synchrone de `lancer`
+    ne doit pas dépendre des `.pt` réellement présents sur la machine (le
+    dépôt n'en versionne aucun — `.gitignore`). Les fakes
+    `FauxDetecteurMinimal` et `CompteurInvisible` sont définis plus bas
+    dans ce fichier — résolus à l'exécution, comme tous les noms de module.
+    """
+    monkeypatch.setattr("interface.app.resoudre_modele", lambda modele: True)
+    monkeypatch.setattr("interface.app.charger_modele", lambda *a, **k: object())
+    monkeypatch.setattr("interface.app.Detecteur", FauxDetecteurMinimal)
+    monkeypatch.setattr("interface.app.Tracker", lambda config: object())
+    monkeypatch.setattr("interface.app.Compteur", CompteurInvisible)
+
+
+def pomper(condition, delai_s=5.0, message="condition jamais atteinte"):
+    """Pompe la boucle Qt jusqu'à ``condition()`` ou timeout.
+
+    Depuis l'asynchrone, les effets de `lancer` arrivent PAR SIGNAL : il
+    faut laisser les événements se délivrer pour les observer. Le délai est
+    BORNÉ — un test doit échouer, pas pendre la suite.
+    """
+    from PySide6.QtWidgets import QApplication
+
+    fin = time.monotonic() + delai_s
+    while not condition():
+        if time.monotonic() >= fin:
+            raise AssertionError(message)
+        QApplication.processEvents()
+        time.sleep(0.005)
+
+
+def attendre_analyse(fenetre, delai_s=10.0):
+    """Pompe jusqu'au démarrage réel de l'analyse (fin du chargement)."""
+    pomper(
+        lambda: fenetre._en_analyse,
+        delai_s,
+        "l'analyse n'a pas démarré après le chargement du modèle",
+    )
+
+
+def _ouvrir_et_tracer(fenetre, chemin):
+    """Vidéo ouverte et ligne verticale tracée — le prérequis de `lancer`."""
+    fenetre.charger_video(str(chemin))
+    fenetre._on_tracer_ligne()
+    fenetre._on_clic_video(10, 2)
+    fenetre._on_clic_video(10, 40)
+
+
+class _PoigneeChargement:
+    """Ce que le test tient à la main pendant un chargement fictif."""
+
+    def __init__(self, dort) -> None:
+        self.appels: list[int] = []
+        self._dort = dort
+
+    def liberer(self) -> None:
+        """Laisse le worker finir son chargement — et livrer son résultat."""
+        self._dort.set()
+
+
+@contextlib.contextmanager
+def chargement_bloque(monkeypatch, fenetre):
+    """Un `charger_modele` qui dort sur un `threading.Event`, libéré à la sortie.
+
+    Le thread doit TOUJOURS être fini avant la destruction de la fenêtre :
+    PySide détruire un QThread vivant est un crash. La sortie fait donc
+    trois choses, dans l'ordre — annuler, libérer le worker, puis POMPER
+    jusqu'à l'arrêt du thread. Un `wait()` bloquant ne convient pas : le
+    `quit` de fin de chargement vient d'une connexion vers le fil
+    principal, qui ne peut se livrer que pendant que ce fil pompe.
+
+    La poignée rendue compte les appels à `charger_modele` (la preuve
+    d'un seul chargement) et permet de libérer le worker au milieu du test.
+    """
+    import threading
+
+    dort = threading.Event()
+    poignee = _PoigneeChargement(dort)
+
+    def charger_dormeur(*_args, **_kwargs):
+        poignee.appels.append(1)
+        dort.wait(10)
+        return object()
+
+    moteur_sans_poids(monkeypatch)
+    monkeypatch.setattr("interface.app.charger_modele", charger_dormeur)
+    try:
+        yield poignee
+    finally:
+        fenetre.arreter()
+        dort.set()
+        if fenetre._thread_modele is not None:
+            pomper(
+                lambda: not fenetre._thread_modele.isRunning(),
+                5.0,
+                "le thread de chargement ne s'arrête pas",
+            )
 
 
 class FauxCompteur:
@@ -778,6 +880,227 @@ def test_le_lancer_signale_un_modele_absent_sans_vider_la_video(
     assert f.btn_lancer.isEnabled()  # on peut réessayer une fois le modèle là
 
 
+# -- Chargement asynchrone du modèle ----------------------------------------
+#
+# Monter les poids coûte plusieurs secondes : fait sur le fil de l'IHM, il
+# gelait la fenêtre — Stop et fermeture compris. Ces tests verrouillent le
+# contrat de l'asynchrone : retour immédiat, un seul chargement à la fois,
+# annulation qui jette le résultat, erreur qui arrive sans perdre la vidéo.
+
+
+def test_le_chargement_ne_bloque_pas_la_fenetre(
+    application, fenetre, video_synthetique, monkeypatch
+):
+    """`lancer` retourne pendant que le thread monte les poids.
+
+    Le faux `charger_modele` dort sur un événement que le test ne pose
+    qu'à la fin : tant que le dort, la fenêtre doit afficher l'état « en
+    chargement », garder Stop actif et rester utilisable — c'est
+    exactement le gel que l'asynchrone supprime.
+    """
+    f = fenetre
+    _ouvrir_et_tracer(f, video_synthetique)
+    with chargement_bloque(monkeypatch, f):
+        f.lancer()
+        # Retour IMMÉDIAT : la ligne ci-dessous serait intenable si le
+        # chargement se faisait sur le fil de l'IHM.
+        assert f._en_analyse is False
+        assert f._chargement_en_cours is True
+        assert "Chargement" in f.label_statut.text()
+        # Verrou anti double-lancement, et Stop actif pour annuler.
+        assert not f.btn_lancer.isEnabled()
+        assert not f.btn_video.isEnabled()
+        assert not f.btn_ligne.isEnabled()
+        assert f.btn_stop.isEnabled()
+        # La boucle d'événements tourne : le fil principal n'attend pas
+        # le thread, qui n'a rien livré entre-temps.
+        from PySide6.QtWidgets import QApplication
+
+        QApplication.processEvents()
+        assert f._chargement_en_cours is True
+        assert f.cap is not None, "la vidéo ne doit pas bouger pendant le chargement"
+
+
+def test_un_double_lancer_pendant_le_chargement_est_ignore(
+    application, fenetre, video_synthetique, monkeypatch
+):
+    """Un double-clic ou une Entrée maintenue ne charge pas les poids deux fois."""
+    f = fenetre
+    _ouvrir_et_tracer(f, video_synthetique)
+    with chargement_bloque(monkeypatch, f) as charge:
+        f.lancer()
+        f.lancer()
+        f.lancer()
+        # `appels` est rempli PAR LE THREAD : il faut le voir démarrer
+        # avant de compter, sinon le test comparerait à zéro par course.
+        pomper(lambda: charge.appels, message="le worker n'a jamais démarré")
+        assert len(charge.appels) == 1, "trois Lancer, un seul chargement"
+
+
+def test_arreter_annule_le_chargement_et_jette_son_resultat(
+    application, fenetre, video_synthetique, monkeypatch
+):
+    """Stop pendant le chargement : le modèle arrive, mais ne démarre rien.
+
+    Le résultat n'est pas bon parce qu'il est ARRIVÉ : l'opérateur a
+    demandé l'arrêt, et monter les poids donnerait une analyse qu'il n'a
+    plus demandée.
+    """
+    f = fenetre
+    _ouvrir_et_tracer(f, video_synthetique)
+    with chargement_bloque(monkeypatch, f) as charge:
+        # Espion installé AVANT le lancer : c'est à ce moment-là que la
+        # connexion `fini → _modele_pret` se fait, sur l'objet courant.
+        livraisons = []
+        original = f._modele_pret
+
+        def espion(chargement):
+            livraisons.append(chargement)
+            original(chargement)
+
+        f._modele_pret = espion
+        f.lancer()
+        assert f._chargement_en_cours is True
+
+        f.arreter()
+        assert f._chargement_en_cours is False
+        assert "annul" in f.label_statut.text().lower()
+
+        # Le worker finit et livre — c'est le pompage qui délivre réellement
+        # le signal, puis l'arrêt du thread.
+        charge.liberer()
+        pomper(lambda: livraisons, message="le thread n'a jamais livré")
+        assert f._en_analyse is False, "le résultat annulé a démarré une analyse"
+        assert f.compteur is None
+        assert not f._timer_traitement.isActive()
+
+
+def test_un_chargement_annule_puis_relance_se_rearme_sans_doubler(
+    application, fenetre, video_synthetique, monkeypatch
+):
+    """Stop puis Lancer à l'identique : le thread qui tourne suffit.
+
+    Relancer ne doit ni créer un SECOND thread (deux montages torch sur le
+    même GPU), ni repartir de zéro — le résultat en route est exactement
+    celui qui est demandé.
+    """
+    f = fenetre
+    _ouvrir_et_tracer(f, video_synthetique)
+    with chargement_bloque(monkeypatch, f) as charge:
+        f.lancer()
+        # Le worker est parti : `appels` est rempli PAR LE THREAD.
+        pomper(lambda: charge.appels, message="le worker n'a jamais démarré")
+        thread = f._thread_modele
+        f.arreter()  # annulation par erreur
+        assert f._chargement_en_cours is False
+
+        f.lancer()  # relance du MÊME modèle
+        assert f._chargement_en_cours is True
+        assert f._thread_modele is thread, "le chargement est réarmé, pas doublé"
+        assert len(charge.appels) == 1, "la relance n'a pas dû relancer un worker"
+
+        charge.liberer()
+        attendre_analyse(f)
+        assert f.compteur is not None, "le modèle réarmé n'a pas été monté"
+
+
+def test_un_reglage_change_pendant_le_chargement_demande_une_relance(
+    application, fenetre, video_synthetique, monkeypatch
+):
+    """Le modèle livré n'est plus celui demandé : on ne le monte pas.
+
+    Monter les poids arrivés reviendrait à compter avec un modèle que
+    l'écran ne montre plus — le décompte serait attribué au mauvais modèle.
+    """
+    f = fenetre
+    _ouvrir_et_tracer(f, video_synthetique)
+    with chargement_bloque(monkeypatch, f) as charge:
+        f.lancer()
+        # L'opérateur change de modèle PENDANT le chargement.
+        f.panneau._modele.setCurrentText("autre_modele.pt")
+
+        charge.liberer()
+        pomper(
+            lambda: not f._chargement_en_cours,
+            message="le chargement n'a jamais abouti",
+        )
+        assert f._en_analyse is False
+        assert f.compteur is None
+        assert "modifiés pendant le chargement" in f.label_statut.text()
+        assert f.btn_lancer.isEnabled()  # on peut relancer avec le nouveau
+
+
+def test_une_erreur_de_chargement_en_thread_signale_sans_perdre_la_video(
+    application, fenetre, video_synthetique, monkeypatch
+):
+    """Une exception levée dans le thread arrive à l'opérateur, intacte.
+
+    Le cas réel : disque plein, poids tronqués, CUDA indisponible. Comme
+    avant l'asynchrone, la vidéo et la ligne SURVIVENT — l'opérateur
+    corrige et relance sans retracer.
+    """
+
+    def charger_en_echec(*_args, **_kwargs):
+        raise RuntimeError("cuda: mémoire insuffisante")
+
+    moteur_sans_poids(monkeypatch)
+    monkeypatch.setattr("interface.app.charger_modele", charger_en_echec)
+
+    f = fenetre
+    _ouvrir_et_tracer(f, video_synthetique)
+    try:
+        f.lancer()
+        pomper(
+            lambda: not f._chargement_en_cours,
+            message="l'échec du thread n'est jamais remonté",
+        )
+        statut = f.label_statut.text()
+        assert "Démarrage impossible" in statut
+        assert "mémoire insuffisante" in statut
+        assert f.cap is not None
+        assert f.ligne is not None
+        assert f._en_analyse is False
+        assert f.btn_lancer.isEnabled()  # on peut corriger et relancer
+    finally:
+        # Le `quit` de fin de chargement ne se livre qu'en pompage : sans
+        # cette ligne, un échec de test laisserait le thread vivant, et
+        # PySide détruit en marche est un crash.
+        if f._thread_modele is not None:
+            pomper(
+                lambda: not f._thread_modele.isRunning(),
+                5.0,
+                "le thread de chargement ne s'arrête pas",
+            )
+
+
+def test_fermeture_pendant_le_chargement_arrete_le_thread_sans_gele(
+    application, fenetre, video_synthetique, monkeypatch
+):
+    """La fermeture annule et attend le thread — bornée, jamais en boucle.
+
+    Le chargement de test est instantané : la fermeture doit rendre un
+    thread ARRÊTÉ (jamais un QThread détruit en marche) sans attendre les
+    15 s du maximum.
+    """
+    from PySide6.QtGui import QCloseEvent
+
+    moteur_sans_poids(monkeypatch)
+
+    f = fenetre
+    _ouvrir_et_tracer(f, video_synthetique)
+    f.lancer()
+    assert f._chargement_en_cours is True
+
+    debut = time.monotonic()
+    f.closeEvent(QCloseEvent())
+    duree = time.monotonic() - debut
+
+    assert f._chargement_en_cours is False
+    assert f._thread_modele is not None
+    assert not f._thread_modele.isRunning()
+    assert duree < 5.0, f"la fermeture a bloqué {duree:.1f} s"
+
+
 # -- Validation du modèle au CHARGEMENT de la vidéo -------------------------
 #
 # Avant, l'absence de `.pt` ne se révélait qu'au « Lancer » — après avoir
@@ -1023,14 +1346,12 @@ def test_le_debit_vit_avec_une_vraie_analyse(
 ):
     """Chemin complet : Lancer montre le label, l'analyse le remplit, l'arrêt l'efface.
 
-    Le faux moteur (les quatre `monkeypatch` ci-dessous) fait tourner la
-    vraie boucle minuterie/affichage sans charger de poids — le test
-    vérifierait autrement le montage, pas le débit.
+    Le faux moteur fait tourner la vraie boucle minuterie/affichage sans
+    charger de poids — le test vérifierait autrement le montage, pas le
+    débit. Depuis l'asynchrone, `lancer` retourne pendant le chargement :
+    il faut POMPER jusqu'au démarrage réel.
     """
-    monkeypatch.setattr("interface.app.charger_modele", lambda *a, **k: object())
-    monkeypatch.setattr("interface.app.Detecteur", FauxDetecteurMinimal)
-    monkeypatch.setattr("interface.app.Tracker", lambda config: object())
-    monkeypatch.setattr("interface.app.Compteur", CompteurInvisible)
+    moteur_sans_poids(monkeypatch)
 
     f = fenetre
     f.charger_video(str(video_longue))  # 100 frames
@@ -1038,6 +1359,7 @@ def test_le_debit_vit_avec_une_vraie_analyse(
     f._on_clic_video(10, 2)
     f._on_clic_video(10, 40)
     f.lancer()
+    attendre_analyse(f)
     assert f.label_debit.isHidden() is False  # visible dès le lancer
 
     # 5 s de traitement simulées : au-dessous du seuil d'affichage, le
@@ -1260,12 +1582,11 @@ def test_avertissement_sens_reapparait_a_la_relance(
     moment précis où l'opérateur vérifie sa correction.
 
     Le modèle est remplacé par un faux : sans cela, `lancer` chargerait
-    `medium.pt` sur le GPU et le test prendrait dix secondes.
+    `medium.pt` sur le GPU et le test prendrait dix secondes. Le premier
+    `lancer` passe par le thread de chargement : il faut pomper jusqu'au
+    démarrage réel.
     """
-    monkeypatch.setattr("interface.app.charger_modele", lambda *a, **k: object())
-    monkeypatch.setattr("interface.app.Detecteur", FauxDetecteurMinimal)
-    monkeypatch.setattr("interface.app.Tracker", lambda config: object())
-    monkeypatch.setattr("interface.app.Compteur", CompteurInvisible)
+    moteur_sans_poids(monkeypatch)
 
     f = fenetre
     f.charger_video(str(video_longue))
@@ -1273,6 +1594,7 @@ def test_avertissement_sens_reapparait_a_la_relance(
     f._on_clic_video(10, 2)
     f._on_clic_video(10, 40)
     f.lancer()
+    attendre_analyse(f)
     assert f._en_analyse is True
     assert f._avertissement_sens_affiche is False
 
@@ -1280,7 +1602,8 @@ def test_avertissement_sens_reapparait_a_la_relance(
     assert avertissement_visible(f) is True
 
     # L'opérateur corrige le sens et RELANCE : le rappel doit pouvoir se
-    # redéployer au lieu de rester muet sur la nouvelle analyse.
+    # redéployer au lieu de rester muet sur la nouvelle analyse. Le
+    # détecteur est déjà monté : cette relance reste synchrone.
     f.arreter()
     f.lancer()
     assert f._avertissement_sens_affiche is False
