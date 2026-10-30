@@ -13,6 +13,7 @@ lui-même — il est déjà exercé sur cette machine — mais le contrat des tr
 valeurs, y compris le cas CUDA indisponible, qui n'est pas le cas par défaut.
 """
 
+import os
 import pathlib
 import subprocess
 import sys
@@ -185,13 +186,22 @@ def test_le_libelle_ne_contient_jamais_de_device_brut(avec_gpu):
 
 
 def _dry_run(*args: str, env=None) -> subprocess.CompletedProcess:
+    """Lancer l'installateur en dry-run.
+
+    `PYTHONIOENCODING=utf-8` est indispensable : sous Windows la console parle
+    CP1252, et l'installateur y écrit des accents (« ÉCHEC », « n'a »). Sans
+    cette variable le décodage UTF-8 strict du parent s'étrangle sur le byte
+    `0xe9` et les cinq tests deviennent rouges — sur une machine francophone
+    uniquement, donc invisibles ailleurs.
+    """
+    environ = {**os.environ, "PYTHONIOENCODING": "utf-8", **(env or {})}
     return subprocess.run(
         [sys.executable, str(RACINE / "installer.py"), "--dry-run", *args],
         capture_output=True,
         text=True,
         encoding="utf-8",
         cwd=str(RACINE),
-        env=env,
+        env=environ,
     )
 
 
