@@ -5,6 +5,8 @@ App desktop PySide6, moteur de comptage YOLO + tracker IoU, Python 3.11.
 
 Ce fichier s'adresse à tout agent qui ouvre ce dépôt (Hermes, Claude Code, Codex, OpenCode, dsh).
 Il ne remplace pas `README.md` (public, en anglais) ni `docs/`.
+Les lots livrés et les candidats à venir sont dans `ROADMAP.md` — ne pas commencer
+un candidat sans validation explicite de l'opérateur.
 
 ## Interpréteur — le piège principal
 
@@ -41,6 +43,36 @@ Avant de travailler, vérifier d'un coup :
 - **Mesurer avant d'affirmer.** Un chiffre arrive toujours avec son périmètre : segment de frames,
   réglage `sens`, résolution, matériel.
 - Le compte de référence se fait sur le segment **frames 3600-4500** (2 min → 2 min 30).
+
+## Tests
+
+- Porte de routine rapide : `python -m pytest tests/ -q -m "not slow"` (530 tests, ~7 s).
+- Suite complète (62 tests `slow` en plus : sous-processus `installer.py`, détection GPU réelle) :
+  `python -m pytest tests/ -q` — **592 tests, ~9 s, 0 échec** (vérifié le 30/10/2026).
+  La suite ne charge jamais torch en inférence : elle est lente par nature uniquement
+  à cause des sous-processus.
+- Un échec dans `tests/test_peripherique.py` en mode slow est presque toujours
+  l'**encodage de la console** : un sous-processus écrit des accents (« ÉCHEC ») en CP1252
+  sur une machine francophone. Le fix est `PYTHONIOENCODING=utf-8` côté enfant
+  (helper `_dry_run`), jamais `errors="replace"` côté parent.
+- Des tracebacks qui citent un ancien nom de dossier (`crowd-counter-v2`) viennent de
+  `__pycache__` périmés après un renommage : purger les `__pycache__` du dépôt
+  (hors `venv-temp/`, `build-env/`), Python les régénère.
+
+## Pièges Qt (interface/) — lus dans le code, payés en production
+
+- `QThread.quit()` appelé **avant** `exec()` est un no-op : le thread n'a pas encore de
+  boucle d'événements. Le `closeEvent` doit itérer (`quit()` + `processEvents()`) et
+  **ne jamais détruire un QThread en marche** — attendre sa fin, bornée.
+- Un worker thread doit rester **référencé** par un attribut de fenêtre : sans ça, le GC
+  le collecte en pleine exécution et le processus crash sans message.
+- Un `wait()` bloquant dans un test empêche la livraison des signaux du worker : dans les
+  tests, **pomper** (`processEvents`) jusqu'à l'événement attendu.
+- `Qt.Key_Escape.toString()` renvoie **`"Esc"`** et non `"Escape"` — comparer la touche
+  via la chaîne sérialisée, pas le nom littéral.
+- Le chargement du modèle (v2.5) tourne dans un worker : toute logique qui doit être
+  SYNCHRONE et certaine (validation d'un chemin de modèle) se fait **avant** de lancer le
+  thread, pas dedans.
 
 ## Configuration de référence
 
