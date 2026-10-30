@@ -41,12 +41,18 @@ from PySide6.QtGui import QMouseEvent  # noqa: E402
 
 from compteur.compteur import TAILLE_LOT_DETECTION  # noqa: E402
 from compteur.types import Evenement, FrameResult, Track  # noqa: E402
-from interface.app import (
+from interface.app import (  # noqa: E402
     AVERTISSEMENT_SENS,
     CADENCE_AFFICHAGE_IPS,
     FenetrePrincipale,
-)  # noqa: E402
+    ecrire_dernier_dossier,
+    lire_dernier_dossier,
+)
 from interface.overlay import dessiner  # noqa: E402
+
+# Le chemin de la mémoire se lit SUR LE MODULE : le conftest le détourne
+# vers un `tmp_path`, et une valeur importée « par copie » ne le verrait pas.
+import interface.app as module_app  # noqa: E402
 
 # Cadence de la vidéo synthétique : 25 i/s. Les tests d'affichage en dépendent
 # (0,25x -> 160 ms entre deux images affichées).
@@ -834,6 +840,66 @@ def test_charger_video_dit_ou_deposer_un_pt_sur_une_installation_neuve(
     statut = f.label_statut.text()
     assert "aucun modèle" in statut.lower()
     assert "modeles/" in statut
+
+
+# -- Mémoire du dernier dossier vidéo ---------------------------------------
+#
+# Le dialogue « Charger la vidéo » partait du dossier de l'exécutable à
+# chaque fois : remonter l'arborescence à chaque ouverture d'une session.
+
+
+def test_la_memoire_du_dossier_survit_au_relaunchement():
+    """Écrit puis relu — c'est la persistance entre deux lancements qui compte."""
+    ecrire_dernier_dossier(r"D:\images\manif")
+    assert lire_dernier_dossier() == r"D:\images\manif"
+
+
+def test_memoire_absente_ou_illisible_renvoie_vide_sans_planter():
+    """Fichier absent, puis JSON cassé : `""` dans les deux cas, jamais une erreur."""
+    assert lire_dernier_dossier() == ""
+    module_app.FICHIER_MEMOIRE_VIDEO.write_text("{ pas du json", encoding="utf-8")
+    assert lire_dernier_dossier() == ""
+
+
+def test_memoire_impossible_a_ecrire_ne_bloque_rien(monkeypatch, tmp_path):
+    """Parent introuvable en écriture : le log suffit, l'ouverture continue."""
+    bloque = tmp_path / "bloc"
+    bloque.write_text("pas un dossier", encoding="utf-8")
+    monkeypatch.setattr(
+        module_app, "FICHIER_MEMOIRE_VIDEO", bloque / "memoire.json"
+    )
+    ecrire_dernier_dossier(str(tmp_path))  # ne doit pas lever
+
+
+def test_charger_video_memorise_le_dossier_de_la_video(
+    application, fenetre, video_synthetique
+):
+    f = fenetre
+    assert f.charger_video(str(video_synthetique)) is True
+    assert lire_dernier_dossier() == str(video_synthetique.parent)
+
+
+def test_une_video_illisible_ne_change_pas_la_memoire(
+    application, fenetre, tmp_path
+):
+    """On ne se souvient QUE des vidéos réellement ouvertes."""
+    ecrire_dernier_dossier(str(tmp_path))
+    f = fenetre
+    assert f.charger_video(str(tmp_path / "inexistant.mp4")) is False
+    assert lire_dernier_dossier() == str(tmp_path)
+
+
+def test_le_dialogue_repart_du_dernier_dossier(application, fenetre, tmp_path):
+    ecrire_dernier_dossier(str(tmp_path))
+    assert fenetre._depart_video() == str(tmp_path)
+
+
+def test_le_dialogue_retombe_sur_vide_si_le_dossier_a_disparu(
+    application, fenetre, tmp_path
+):
+    """Disque débranché, dossier renommé : ne pas demander un chemin mort."""
+    ecrire_dernier_dossier(str(tmp_path / "plus_la"))
+    assert fenetre._depart_video() == ""
 
 
 # -- Avertissement « 0 compté : vérifie le sens » ------------------------

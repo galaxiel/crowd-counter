@@ -30,6 +30,7 @@ dans la barre de statut, qui est visible dans les deux cas.
 
 from __future__ import annotations
 
+import json
 import logging
 import pathlib
 
@@ -107,6 +108,46 @@ FILTRES_VIDEOS = (
     "Vidéos (*.mp4 *.avi *.mkv *.mov *.m4v *.webm);;Tous les fichiers (*)"
 )
 
+#: Mémoire du dernier dossier vidéo ouvert, entre deux lancements.
+#:
+#: Le dialogue « Charger la vidéo » partait toujours du dossier courant —
+#: celui de l'exécutable — ce qui obligeait à remonter l'arborescence à
+#: chaque ouverture. Le fichier est relatif au dossier courant, comme les
+#: profils, et son nom `local_*.json` tombe sous le `.gitignore` existant
+#: (`config/local_*.json`) : c'est une préférence d'un poste, pas du code.
+FICHIER_MEMOIRE_VIDEO = pathlib.Path("config") / "local_dossier_video.json"
+
+
+def lire_dernier_dossier() -> str:
+    """Dossier de la dernière vidéo ouverte, ou `""` si mémoire absente.
+
+    Toute illisibilité — fichier absent, JSON cassé, disque enlevé — rend
+    `""`, pas une erreur : la mémoire d'un dialogue est un confort, jamais
+    une condition au démarrage.
+    """
+    try:
+        donnees = json.loads(FICHIER_MEMOIRE_VIDEO.read_text(encoding="utf-8"))
+        return str(donnees.get("dossier", ""))
+    except (OSError, ValueError, AttributeError):
+        return ""
+
+
+def ecrire_dernier_dossier(dossier: str) -> None:
+    """Mémorise ``dossier`` pour la prochaine ouverture. N'échoue jamais.
+
+    Un souci d'écriture (dossier protégé, disque plein) est loggé et
+    ignoré : il ne doit pas empêcher d'ouvrir une vidéo qui, elle, a
+    parfaitement réussi à se lire.
+    """
+    try:
+        FICHIER_MEMOIRE_VIDEO.parent.mkdir(parents=True, exist_ok=True)
+        FICHIER_MEMOIRE_VIDEO.write_text(
+            json.dumps({"dossier": dossier}, ensure_ascii=False),
+            encoding="utf-8",
+        )
+    except OSError as exc:
+        log.warning("dossier vidéo non mémorisé : %s", exc)
+
 #: TAILLE DE LA LISTE des boîtes vertes affichées après un comptage.
 #:
 #: La liste est bornée DEUX fois, par deux règles indépendantes, parce que
@@ -126,7 +167,7 @@ FILTRES_VIDEOS = (
 #:    n'est possible.
 #:
 #: Pourquoi 200 : à 256 personnes sur 3000 frames, il y a en moyenne 0,085
-#: comptage par frame. Une durée de 145 frames donne donc ~12 boîtes vivantes
+#: comptage par frame. Une durée de 400 frames donne donc ~34 boîtes vivantes
 #: en régime normal. 200 est un ordre de grandeur au-dessus : le plafond ne
 #: se déclenche jamais sur une analyse réelle, ce qui est exactement ce qu'on
 #: veut d'un filet de sécurité — s'il se déclenchait, il masquerait un bug au
@@ -546,10 +587,22 @@ class FenetrePrincipale(QMainWindow):
 
     def _on_charger_video(self) -> None:
         chemin, _ = QFileDialog.getOpenFileName(
-            self, "Choisir une vidéo", "", FILTRES_VIDEOS
+            self, "Choisir une vidéo", self._depart_video(), FILTRES_VIDEOS
         )
         if chemin:
             self.charger_video(chemin)
+
+    def _depart_video(self) -> str:
+        """Dossier de départ du dialogue : le dernier ouvert, s'il existe.
+
+        S'il a été supprimé depuis (disque externe débranché, dossier
+        renommé), on retombe sur `""` — Qt ouvrira son propre dossier —
+        plutôt que de demander à l'explorateur un chemin mort.
+        """
+        dossier = lire_dernier_dossier()
+        if dossier and pathlib.Path(dossier).is_dir():
+            return dossier
+        return ""
 
     def charger_video(self, chemin: str) -> bool:
         """Ouvre ``chemin`` et affiche sa première frame. Faux si illisible."""
@@ -568,6 +621,9 @@ class FenetrePrincipale(QMainWindow):
         self._liberer_capture()
         self.cap = cap
         self.video_finiment = p
+        # Mémorisé ICI, après la seule étape qui peut échouer (ouvrir le
+        # fichier) : on n'oublie que les vidéos réellement ouvertes.
+        ecrire_dernier_dossier(str(p.parent))
         self._reset_analyse()
         self._afficher_premiere_frame()
 
