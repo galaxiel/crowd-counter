@@ -78,6 +78,14 @@ jobs:
           # retombe pas sur la wheel CUDA de PyPI.
           pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
           pip install -r requirements.txt
+          # ultralytics réclame `opencv-python` (variante complète) en
+          # dépendance : pip l'installe même si requirements demande la
+          # headless, et les deux écrivent dans le même dossier `cv2/`.
+          # Purge des deux puis headless seule — la même séquence que
+          # docs/BUILDING.md étape 3bis : la CI teste alors le cv2 que
+          # l'exécutable embarquera.
+          pip uninstall -y opencv-python opencv-python-headless
+          pip install opencv-python-headless
 
       - name: Suite de tests (passe rapide)
         run: python -m pytest -m "not slow" -q

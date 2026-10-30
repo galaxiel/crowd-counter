@@ -62,10 +62,12 @@ des doublons. Le venv construit au premier lancement contient `numpy`, `PIL`,
 nécessaire, pas redondant : les exclure casserait le démarrage, puisque
 `main.py` importe PySide6 avant même que le venv soit interrogeable.
 
-Ce qui ferait réellement descendre sous 200 Mo, et qui n'a PAS été fait parce
-que cela sort du cadre de la tâche : passer à `opencv-python-headless`
-(~80 Mo gagnés, parfaitement faisable car le logiciel n'affiche rien
-d'OpenCV).
+Ce qui fera réellement descendre sous 200 Mo : passer à
+`opencv-python-headless` — FAIT (v2.6, item 3) dans `requirements.txt`,
+`installer.py` et `docs/BUILDING.md` (étape 3bis), car le logiciel
+n'affiche rien d'OpenCV. Le gain (~80 Mo attendus) se mesurera à la
+prochaine reconstruction : BUILDING.md impose la purge des DEUX paquets
+opencv, ultralytics réclamant `opencv-python` en dépendance.
 
 **Les exclusions torch sont RÉELLEMENT nécessaires ici, et le nom
 « excludes » est trompeur.** PyInstaller applique `excludes` à l'analyse

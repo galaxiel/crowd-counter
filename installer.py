@@ -43,7 +43,25 @@ log = logging.getLogger("installer")
 INDEX_CUDA = "https://download.pytorch.org/whl/cu126"
 
 #: Paquets de premier rang, installés dans tous les cas.
-PAQUETS_COMMUNS = ("ultralytics", "opencv-python", "numpy", "PySide6")
+#:
+#: OpenCV en est VOLONTAIREMENT absent : la bascule headless (v2.6, item 3)
+#: ne se résume pas à changer un nom de paquet. Voir `PAQUETS_OPENCV` et
+#: `etapes_installation` — ultralytics réclame la variante complète en
+#: dépendance, et il faut purger avant d'installer la headless.
+PAQUETS_COMMUNS = ("ultralytics", "numpy", "PySide6")
+
+#: OpenCV, variante headless. Installé par une étape DÉDIÉE après purge —
+#: jamais dans `PAQUETS_COMMUNS`. `ultralytics` déclare `opencv-python` en
+#: dépendance (vérifié dans son METADATA : `Requires-Dist:
+#: opencv-python!=4.13.0.90,>=4.7.0`) : pip installe donc la variante
+#: complète même si la headless est demandée, et les deux paquets écrivent
+#: dans le MÊME dossier `cv2/` — le contenu importé devient un mélange dont
+#: le gagnant dépend de l'ordre d'installation. Seule la séquence
+#: « purger les deux, puis installer la headless » laisse un `cv2/` propre
+#: et déterministe. Le logiciel n'affiche rien avec OpenCV (l'interface est
+#: PySide6) : la variante complète ne sert qu'à embarquer des DLL
+#: d'affichage en doublon avec Qt.
+PAQUETS_OPENCV = ("opencv-python-headless",)
 
 
 class Detection(NamedTuple):
@@ -209,15 +227,29 @@ def main(argv: list[str] | None = None) -> int:
     gpu = detection.nvidia and args.peripherique != "cpu"
     annoncer(detection, gpu)
 
-    etapes = [commande_torch(gpu), list(PAQUETS_COMMUNS)]
+    # Séquence complète des pip, chacune avec sa sous-commande. L'ordre n'est
+    # pas décoratif : ultralytics déclare `opencv-python` en dépendance, donc
+    # l'étape 2 installe la variante COMPLÈTE en même temps que la nôtre —
+    # les deux écrivent dans le même dossier `cv2/`. On purge les deux, puis
+    # on installe la seule headless : c'est la seule façon d'obtenir un `cv2/`
+    # entièrement headless, et de façon déterministe (voir `PAQUETS_OPENCV`).
+    # `pip uninstall` d'un paquet absent n'est pas une erreur (avertissement
+    # et code 0) : la purge est sûre sur un environnement qui n'a jamais eu
+    # OpenCV.
+    etapes = [
+        ["install", *commande_torch(gpu)],
+        ["install", *PAQUETS_COMMUNS],
+        ["uninstall", "-y", "opencv-python", "opencv-python-headless"],
+        ["install", *PAQUETS_OPENCV],
+    ]
     if args.dry_run:
         for etape in etapes:
-            print(f"  pip install {' '.join(etape)}")
+            print(f"  pip {' '.join(etape)}")
         print("\n--dry-run : rien n'a été installé.")
         return 0
 
     for etape in etapes:
-        commande = [sys.executable, "-m", "pip", "install", *etape]
+        commande = [sys.executable, "-m", "pip", *etape]
         print(f"\n$ {' '.join(commande)}")
         code = subprocess.call(commande)
         if code != 0:

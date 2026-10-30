@@ -26,7 +26,18 @@ build-env\Scripts\python -m pip install torch==2.14.1+cu126 torchvision==0.29.1+
     --index-url https://download.pytorch.org/whl/cu126
 
 # 3. the rest — from PyPI, never from the torch index
-build-env\Scripts\python -m pip install ultralytics opencv-python PySide6 pyinstaller pytest
+build-env\Scripts\python -m pip install ultralytics PySide6 pyinstaller pytest
+
+# 3bis. OpenCV HEADLESS, not opencv-python: the application never shows an
+# OpenCV window (the UI is PySide6) — the full build only adds GUI DLLs
+# that duplicate PySide6 (~80 MB in the bundle).
+# TRAP: ultralytics declares opencv-python as a dependency, so pip installs
+# the FULL build even when the headless one is requested, and both packages
+# write into the same site-packages/cv2 folder. Purge BOTH, then install
+# the headless build alone — that is the only deterministic way to end up
+# with a headless-only cv2:
+build-env\Scripts\python -m pip uninstall -y opencv-python opencv-python-headless
+build-env\Scripts\python -m pip install opencv-python-headless
 
 # 4. build — note the workpath
 build-env\Scripts\python -m PyInstaller --clean --workpath build/v2 crowd-counter.spec

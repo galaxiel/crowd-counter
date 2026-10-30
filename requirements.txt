@@ -4,7 +4,19 @@ ultralytics>=8.3
 # (compteur/tracker.py), écrit dans ce dépôt. Vérifié : aucun `import
 # supervision` dans compteur/ ni interface/ — seule une mention en commentaire
 # subsiste, dans le nom historique `_BackendSupervision`.
-opencv-python>=4.10
+# `opencv-python-headless` et non `opencv-python` : le logiciel n'affiche
+# JAMAIS rien avec OpenCV (l'interface est PySide6 ; OpenCV ne fait que lire
+# la vidéo, rogner la bande et écrire les vidéos de test). La variante
+# complète embarque ses propres DLL d'affichage, un doublon lourd avec
+# PySide6 (~80 Mo de gagnés dans l'exécutable).
+#
+# PIÈGE CONNU : `ultralytics` déclare `opencv-python` en dépendance — pip
+# installe donc la variante complète EN PLUS de la headless, et les deux
+# paquets écrivent dans le même dossier `cv2`. Il faut purger puis réinstaller
+# (voir docs/BUILDING.md étape 3bis, et `installer.py` qui le fait tout seul) :
+#     pip uninstall -y opencv-python opencv-python-headless
+#     pip install opencv-python-headless
+opencv-python-headless>=4.10
 numpy>=1.26
 Pillow>=10.4
 PySide6>=6.7
