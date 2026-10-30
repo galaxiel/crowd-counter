@@ -29,8 +29,11 @@ build-env\Scripts\python -m pip install torch==2.14.1+cu126 torchvision==0.29.1+
 build-env\Scripts\python -m pip install ultralytics PySide6 pyinstaller pytest
 
 # 3bis. OpenCV HEADLESS, not opencv-python: the application never shows an
-# OpenCV window (the UI is PySide6) — the full build only adds GUI DLLs
-# that duplicate PySide6 (~80 MB in the bundle).
+# OpenCV window (the UI is PySide6) — the headless build is the right
+# package for this. NOTE on weight: measured 2026-10-30, the saving is only
+# ~0.5 MB (dist 293.7 -> 293.2 MB), because OpenCV 5.x no longer ships Qt
+# DLLs inside its Windows wheel (4.x did; that's where the old "~80 MB"
+# estimate came from).
 # TRAP: ultralytics declares opencv-python as a dependency, so pip installs
 # the FULL build even when the headless one is requested, and both packages
 # write into the same site-packages/cv2 folder. Purge BOTH, then install

@@ -6,9 +6,11 @@ ultralytics>=8.3
 # subsiste, dans le nom historique `_BackendSupervision`.
 # `opencv-python-headless` et non `opencv-python` : le logiciel n'affiche
 # JAMAIS rien avec OpenCV (l'interface est PySide6 ; OpenCV ne fait que lire
-# la vidéo, rogner la bande et écrire les vidéos de test). La variante
-# complète embarque ses propres DLL d'affichage, un doublon lourd avec
-# PySide6 (~80 Mo de gagnés dans l'exécutable).
+# la vidéo, rogner la bande et écrire les vidéos de test). C'est le bon
+# paquet pour ce usage — mesuré le 30/10/2026 : le gain de poids est de
+# ~0,5 Mo seulement (293,7 → 293,2 Mo de dist), parce qu'OpenCV 5.x n'embarque
+# plus de DLL Qt dans sa wheel Windows (c'était le cas en 4.x, d'où
+# l'estimation « ~80 Mo » devenue fausse).
 #
 # PIÈGE CONNU : `ultralytics` déclare `opencv-python` en dépendance — pip
 # installe donc la variante complète EN PLUS de la headless, et les deux

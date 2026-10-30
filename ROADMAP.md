@@ -47,7 +47,7 @@ Effort : `S` < 1 h, `M` 1-4 h, `L` une journée ou plus.
 |---|---|---|
 | 1. Banc de vérité terrain | outillage committé, vidéo lente produite | **annotation humaine** puis `comparer` |
 | 2. CI GitHub Actions | workflow committé | preuve = premier push vert |
-| 3. opencv-headless | bascule faite (requirements, installer, BUILDING, CI) | gain ~80 Mo à mesurer à la reconstruction |
+| 3. opencv-headless | bascule faite + mesurée : gain réel **0,5 Mo** (plus de Qt dans la wheel 5.x) | bascule maintenue (bon paquet), pas pour le poids |
 | 4. imgsz sur la bande | **mesuré** (32 à 640/704, 36 à 1280) | décision après vérité terrain |
 | 5. Double sens | **rejeté** par l'opérateur | — |
 | 6. Reprise au scrub | gardée, sans mémoire | à rouvrir sur besoin réel |
@@ -123,13 +123,17 @@ d'OpenCV, qui font double emploi avec PySide6.
 METADATA) — pip installe la variante complète **en plus** de la headless, et
 les deux paquets écrivent dans le même dossier `cv2/`. D'où la séquence
 déterministe, écrite à trois endroits : installer tout, purger les DEUX
-paquets, réinstaller la headless seule. `installer.py --dry-run` montre la
-séquence complète (4 étapes) sans rien installer.
+paquets, réinstaller la headless seule.
 
-**Preuve restante.** Poids du dossier `dist/` avant/après, mesuré après
-reconstruction — et lancement de l'exécutable vérifié (un `.exe` qui démarre
-sans fenêtre ne prouve rien, règle déjà écrite dans `AGENTS.md`). Le gain
-attendu est ~80 Mo, non encore mesuré.
+**Mesure faite (`fb4e506`+reconstruction, 30/10) — et elle réfute l'estimation
+initiale.** Le gain n'est PAS de ~80 Mo mais de **~0,5 Mo** : `dist` passe de
+293,7 Mo à 293,2 Mo (sans les modèles), `cv2` embarquée de 111,8 à 111,3 Mo.
+La raison : l'estimation venait d'OpenCV **4.x**, dont la wheel Windows
+embarquait ses DLL Qt. OpenCV **5.0.0.93** ne les embarque plus (wheel
+complète 44,0 Mo vs headless 43,8 Mo ; la licence du paquet ne mentionne Qt
+que pour les wheels **Linux**). La bascule est maintenue parce que c'est le
+bon paquet pour un logiciel qui n'affiche rien avec OpenCV — pas à cause du
+poids.
 
 ### 4. `imgsz` calé sur la bande rognée — effort `M`
 

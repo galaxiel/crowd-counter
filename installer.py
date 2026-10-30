@@ -59,8 +59,9 @@ PAQUETS_COMMUNS = ("ultralytics", "numpy", "PySide6")
 #: le gagnant dépend de l'ordre d'installation. Seule la séquence
 #: « purger les deux, puis installer la headless » laisse un `cv2/` propre
 #: et déterministe. Le logiciel n'affiche rien avec OpenCV (l'interface est
-#: PySide6) : la variante complète ne sert qu'à embarquer des DLL
-#: d'affichage en doublon avec Qt.
+#: PySide6) : la headless est le bon paquet pour cet usage. Le poids n'est
+#: PAS un motif (mesuré le 30/10/2026 : 0,5 Mo — OpenCV 5.x n'embarque plus
+#: de Qt dans sa wheel Windows, contrairement à 4.x).
 PAQUETS_OPENCV = ("opencv-python-headless",)
 
 
