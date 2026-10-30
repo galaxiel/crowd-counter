@@ -46,11 +46,14 @@ Avant de travailler, vérifier d'un coup :
 
 ## Tests
 
-- Porte de routine rapide : `python -m pytest tests/ -q -m "not slow"` (530 tests, ~7 s).
+- Porte de routine rapide : `python -m pytest tests/ -q -m "not slow"` (553 tests, ~15 s).
 - Suite complète (62 tests `slow` en plus : sous-processus `installer.py`, détection GPU réelle) :
-  `python -m pytest tests/ -q` — **592 tests, ~9 s, 0 échec** (vérifié le 30/10/2026).
+  `python -m pytest tests/ -q` — **615 tests, ~10 s, 0 échec** (vérifié le 30/10/2026).
   La suite ne charge jamais torch en inférence : elle est lente par nature uniquement
   à cause des sous-processus.
+- CI GitHub Actions (`.github/workflows/tests.yml`) lance la passe rapide à chaque push :
+  Ubuntu, torch CPU, `QT_QPA_PLATFORM=offscreen`, purge opencv-headless identique à
+  `docs/BUILDING.md`. Elle ne valide pas le comptage, seulement la cohérence du code.
 - Un échec dans `tests/test_peripherique.py` en mode slow est presque toujours
   l'**encodage de la console** : un sous-processus écrit des accents (« ÉCHEC ») en CP1252
   sur une machine francophone. Le fix est `PYTHONIOENCODING=utf-8` côté enfant
@@ -81,6 +84,16 @@ Vidéo de test : `D:\Bureau\manif_test.mp4` (1280x720, 7399 frames), ligne verti
 **Le sens par défaut `+1` ne compte RIEN sur cette vidéo. `sens=-1` compte 315.**
 Tous les diagnostics faits avec `+1` sont faux : une « preuve » que le compteur est cassé avec ce
 réglage ne prouve rien.
+
+**`imgsz` : le harnais et l'app ne mesurent pas à la même taille.** Le harnais
+`tools/mesurer_reference.py` utilise `taille_entree` par défaut de `Config` (640),
+mais l'application, en résolution automatique (`taille_entree_automatique`), analyse
+cette vidéo à **1280**. Mesuré le 30/10/2026 sur frames 3600-4500, `sens=-1`,
+`tetes-medium.pt` : **640 → 32 comptés (~47 i/s), 704 → 32 (~51 i/s), 1280 → 36
+(~30 i/s)** — répétable sur 3 passes. Un « 32 » de harnais et un « 36 » d'app ne
+sont donc PAS deux mesures de la même chose. Trancher lequel est juste exige le
+banc de vérité terrain : `tools/verite_terrain.py comparer` (l'app utilise déjà la
+résolution auto de l'app par défaut, `--imgsz` pour forcer).
 
 ## Architecture
 
