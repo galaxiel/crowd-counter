@@ -33,6 +33,7 @@ from __future__ import annotations
 import json
 import logging
 import pathlib
+import time
 
 import cv2
 from PySide6.QtCore import QTimer, QUrl, Qt
@@ -77,7 +78,7 @@ from interface.panneau_reglages import (
     PanneauReglages,
     orientation_par_defaut_sens,
 )
-from interface.recap import PanneauRecap
+from interface.recap import PanneauRecap, formater_duree
 from interface.style import appliquer_style  # noqa: F401  (ré-export pour main.py)
 from interface.widgets_video import WidgetVideo
 
@@ -222,6 +223,13 @@ class FenetrePrincipale(QMainWindow):
         self._en_analyse = False
         #: Une analyse a été démarrée et n'est pas terminée (pause comprise).
         self._session_ouverte = False
+        #: Horloge de départ de l'analyse EN COURS (`time.monotonic`), pour le
+        #: débit affiché sous la barre. `None` hors analyse.
+        self._debut_analyse: float | None = None
+        #: Début de la pause en cours, pour que le temps de pause ne soit PAS
+        #: décompté du débit : 10 minutes d'arrêt ne doivent pas afficher un
+        #: « 2 i/s » qui décrit l'inactivité de l'opérateur, pas le moteur.
+        self._pause_debut: float | None = None
         #: L'avertissement « 0 compté » a déjà été montré pour CETTE analyse.
         #: Vrai une fois, remis à faux à chaque nouveau comptage.
         self._avertissement_sens_affiche = False
@@ -290,6 +298,15 @@ class FenetrePrincipale(QMainWindow):
         self.barre_progression.setFormat("%v / %m frames (%p %)")
         self.barre_progression.setVisible(False)
         colonne_video.addWidget(self.barre_progression)
+
+        # Débit réel et temps restant, DIRECTEMENT SOUS la barre : c'est là
+        # que l'œil cherche « ça avance, ça mettra combien ? ». Le temps
+        # restant est une ESTIMATION (marquée « ≈ ») : elle n'a de sens que
+        # pendant l'analyse, d'où un label dédié plutôt que le format de la
+        # barre, qui, lui, reste affiché en fin d'analyse.
+        self.label_debit = QLabel("")
+        self.label_debit.setVisible(False)
+        colonne_video.addWidget(self.label_debit)
 
         racine.addLayout(colonne_video, stretch=3)
 
@@ -751,9 +768,15 @@ class FenetrePrincipale(QMainWindow):
         self.recap.effacer()
         self.recap.setVisible(False)
         # La barre de progression appartient à la vidéo précédente : elle est
-        # masquée et repartira de zéro au prochain « Lancer ».
+        # masquée et repartira de zéro au prochain « Lancer ». Idem pour le
+        # débit : ni son horloge ni son estimation ne survivent au changement
+        # de vidéo.
         self.barre_progression.setValue(0)
         self.barre_progression.setVisible(False)
+        self._debut_analyse = None
+        self._pause_debut = None
+        self.label_debit.clear()
+        self.label_debit.setVisible(False)
         self._nb_frames_video = 0
         self.maj_compteurs(0, 0, 0)
 
@@ -1223,6 +1246,13 @@ class FenetrePrincipale(QMainWindow):
         # l'opérateur voit d'un coup d'œil que la scène est allée au bout.
         self.barre_progression.setValue(0)
         self.barre_progression.setVisible(True)
+        # Horloge du débit : démarrée ICI, pas au premier `_tick`, pour que
+        # le premier lot — souvent le plus lent (montée en charge du GPU) —
+        # soit compté comme le reste.
+        self._debut_analyse = time.monotonic()
+        self._pause_debut = None
+        self.label_debit.setText("")
+        self.label_debit.setVisible(True)
         self._maj_boutons()
         self.label_statut.setText("Analyse en cours…")
         self._timer_traitement.start()
@@ -1267,9 +1297,16 @@ class FenetrePrincipale(QMainWindow):
         if self._en_analyse:
             self._timer_traitement.stop()
             self._en_analyse = False
+            self._pause_debut = time.monotonic()
             self.btn_pause.setText("Reprendre")
             self.label_statut.setText("En pause.")
         elif self._session_ouverte and self.compteur is not None:
+            if self._debut_analyse is not None and self._pause_debut is not None:
+                # La pause est RETIRÉE de l'horloge du débit : en décalant le
+                # départ d'autant, `maintenant - début` ne compte plus que le
+                # temps réellement passé à traiter.
+                self._debut_analyse += time.monotonic() - self._pause_debut
+            self._pause_debut = None
             self._timer_traitement.start()
             self._ouvrir_session()
             self.label_statut.setText("Analyse en cours…")
@@ -1297,6 +1334,12 @@ class FenetrePrincipale(QMainWindow):
         self._rafraichir_zone_deplacement()
         self._en_analyse = False
         self._session_ouverte = False
+        # L'estimation du temps restant n'a plus de sens une fois l'analyse
+        # arrêtée : le label se vide et la horloge s'éteint — un « reste ≈
+        # 40 s » laissé affiché après un Stop mentirait.
+        self._debut_analyse = None
+        self._pause_debut = None
+        self.label_debit.clear()
         self.btn_pause.setText("Pause")
         self._maj_boutons()
         if analyse_engagee:
@@ -1520,6 +1563,45 @@ class FenetrePrincipale(QMainWindow):
         # second alimente encore l'avertissement « 0 compté », qui raisonne en
         # secondes de VIDÉO, et le premier le bilan de fin d'analyse.
         self._maj_avertissement_sens(int(total), int(frames))
+        self._maj_debit()
+
+    # -- Débit et temps restant -------------------------------------------
+
+    def _maj_debit(self) -> None:
+        """Réécrit le label de débit si une analyse tourne.
+
+        Rien hors analyse (`_debut_analyse` à `None`) : c'est le même
+        drapeau que la session, il ne peut pas désaccorder le label de
+        l'état réel de la fenêtre.
+        """
+        if self._debut_analyse is None:
+            return
+        self.label_debit.setText(
+            self._texte_debit(time.monotonic() - self._debut_analyse)
+        )
+
+    def _texte_debit(self, ecoule: float) -> str:
+        """« 41 i/s — reste ≈ 2 min 55 s » pour ``ecoule`` secondes écoulées.
+
+        Séparé de l'horloge pour être testé sans manipuler le temps réel.
+
+        Trois règles d'honnêteté :
+        - **aucun chiffre avant une demi-seconde** : sur les tout premiers
+          instants, le débit saute de plusieurs milliers d'i/s, lecture
+          absurde qui jette le doute sur tout le reste ;
+        - **le temps restant est approximatif** (« ≈ ») : le débit d'une
+          scène dépend de la densité de la foule, il n'est pas linéaire ;
+        - **pas de temps restant sans total connu** — un conteneur muet
+          (`_nb_frames_video == 0`) ne permet aucune division.
+        """
+        if ecoule < 0.5 or self.frames <= 0:
+            return ""
+        ips = self.frames / ecoule
+        texte = f"{ips:.0f} i/s"
+        if self._nb_frames_video > self.frames:
+            reste = (self._nb_frames_video - self.frames) / ips
+            texte += f" — reste ≈ {formater_duree(reste)}"
+        return texte
 
     # -- Avertissement « 0 compté » --------------------------------------
 

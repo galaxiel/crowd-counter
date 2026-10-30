@@ -25,6 +25,7 @@ Sans cette garde, un test qui provoke une erreur resterait bloqué sur un
 """
 
 import os
+import time
 
 # Doit précéder la création de QApplication (voir test_widgets_video.py).
 # `setdefault` respecte un choix déjà pris dans l'environnement de lancement.
@@ -900,6 +901,155 @@ def test_le_dialogue_retombe_sur_vide_si_le_dossier_a_disparu(
     """Disque débranché, dossier renommé : ne pas demander un chemin mort."""
     ecrire_dernier_dossier(str(tmp_path / "plus_la"))
     assert fenetre._depart_video() == ""
+
+
+# -- Débit et temps restant -------------------------------------------------
+#
+# « Ça avance ? ça mettra combien ? » — les deux questions que pose un
+# opérateur devant une scène de trente minutes, sous la barre de progression.
+
+
+def test_le_debit_est_invisible_tant_que_aucune_analyse_n_a_lieu(
+    application, fenetre
+):
+    f = fenetre
+    assert f.label_debit.isHidden() is True
+    assert f.label_debit.text() == ""
+
+
+def test_aucun_debit_affiche_avant_une_demi_seconde(application, fenetre):
+    """Sur les premiers instants, le débit oscille entre 0 et des milliers.
+
+    Un chiffre absurde au démarrage jette le doute sur tout le reste : le
+    label reste vide le temps d'une mesure exploitable.
+    """
+    f = fenetre
+    f.frames = 100
+    f._nb_frames_video = 500
+    assert f._texte_debit(0.2) == ""
+
+
+def test_aucun_debit_sans_frame_traitee(application, fenetre):
+    """Diviser 0 frames par le temps donnerait « 0 i/s », lecture fausse."""
+    f = fenetre
+    f.frames = 0
+    f._nb_frames_video = 500
+    assert f._texte_debit(10.0) == ""
+
+
+def test_debit_et_temps_restant(application, fenetre):
+    """100 frames traitées en 10 s, 500 au total : 10 i/s, reste 400 frames."""
+    f = fenetre
+    f.frames = 100
+    f._nb_frames_video = 500
+    assert f._texte_debit(10.0) == "10 i/s — reste ≈ 40 s"
+
+
+def test_pas_de_temps_restant_sans_total_connus(application, fenetre):
+    """Conteneur muet (`_nb_frames_video == 0`) : aucune division possible.
+
+    La barre bascule déjà en mode « occupé » dans ce cas ; le débit, lui,
+    reste affiché — seule l'estimation disparaît.
+    """
+    f = fenetre
+    f.frames = 100
+    f._nb_frames_video = 0
+    assert f._texte_debit(10.0) == "10 i/s"
+
+
+def test_pas_de_temps_restant_quand_tout_est_passe(application, fenetre):
+    """Au bout : le débit reste vrai, l'estimation n'a plus d'objet."""
+    f = fenetre
+    f.frames = 500
+    f._nb_frames_video = 500
+    assert f._texte_debit(10.0) == "50 i/s"
+
+
+def test_le_debit_s_affiche_pendant_l_analyse(
+    application, fenetre, video_synthetique
+):
+    """De l'horloge au label, par le chemin normal (`maj_compteurs`)."""
+    f = fenetre
+    f.charger_video(str(video_synthetique))
+    f._nb_frames_video = 500
+    f._debut_analyse = time.monotonic() - 10.0
+    f.maj_compteurs(10, 5, 100)
+    assert "i/s" in f.label_debit.text()
+    assert "reste ≈" in f.label_debit.text()
+
+
+def test_hors_analyse_le_debit_ne_s_maj_plus(application, fenetre):
+    """Après l'arrêt, `_debut_analyse` est éteint : le label ne se remplit
+    plus jamais tout seul (aucune mise à jour fantôme après un Stop)."""
+    f = fenetre
+    f._debut_analyse = None
+    f.maj_compteurs(10, 5, 100)
+    assert f.label_debit.text() == ""
+
+
+def test_arreter_efface_le_temps_restant(application, fenetre):
+    """Un « reste ≈ 40 s » affiché APRÈS un Stop mentirait à l'opérateur."""
+    f = fenetre
+    f._debut_analyse = time.monotonic()
+    f.label_debit.setText("41 i/s — reste ≈ 40 s")
+    f.arreter()
+    assert f.label_debit.text() == ""
+    assert f._debut_analyse is None
+
+
+def test_la_pause_ne_compte_pas_dans_le_debit(
+    application, fenetre, video_synthetique
+):
+    """Dix minutes d'arrêt ne doivent pas afficher « 2 i/s ».
+
+    Le test simule 10 s de traitement puis 100 s de pause : à la reprise,
+    l'horloge doit n'avoir gardé que les 10 s de travail.
+    """
+    f = fenetre
+    f.charger_video(str(video_synthetique))
+    f.compteur = FauxCompteur()
+    f._ouvrir_session()
+    f._debut_analyse = time.monotonic() - 110.0  # 10 s de taf + 100 s de pause
+    f._basculer_pause()  # mise en pause
+    assert f._pause_debut is not None
+    f._pause_debut = time.monotonic() - 100.0  # la pause a duré 100 s
+    f._basculer_pause()  # reprise : la pause est retirée de l'horloge
+    ecoule = time.monotonic() - f._debut_analyse
+    assert 0 <= ecoule < 30, f"la pause est comptée : {ecoule:.0f} s"
+
+
+def test_le_debit_vit_avec_une_vraie_analyse(
+    application, fenetre, video_longue, monkeypatch
+):
+    """Chemin complet : Lancer montre le label, l'analyse le remplit, l'arrêt l'efface.
+
+    Le faux moteur (les quatre `monkeypatch` ci-dessous) fait tourner la
+    vraie boucle minuterie/affichage sans charger de poids — le test
+    vérifierait autrement le montage, pas le débit.
+    """
+    monkeypatch.setattr("interface.app.charger_modele", lambda *a, **k: object())
+    monkeypatch.setattr("interface.app.Detecteur", FauxDetecteurMinimal)
+    monkeypatch.setattr("interface.app.Tracker", lambda config: object())
+    monkeypatch.setattr("interface.app.Compteur", CompteurInvisible)
+
+    f = fenetre
+    f.charger_video(str(video_longue))  # 100 frames
+    f._on_tracer_ligne()
+    f._on_clic_video(10, 2)
+    f._on_clic_video(10, 40)
+    f.lancer()
+    assert f.label_debit.isHidden() is False  # visible dès le lancer
+
+    # 5 s de traitement simulées : au-dessous du seuil d'affichage, le
+    # label resterait légitimement vide.
+    f._debut_analyse = time.monotonic() - 5.0
+    avancer(f, 10)  # 40 frames traitées et affichées
+    texte = f.label_debit.text()
+    assert "i/s" in texte, texte
+    assert "reste ≈" in texte, texte
+
+    f.arreter()
+    assert f.label_debit.text() == ""
 
 
 # -- Avertissement « 0 compté : vérifie le sens » ------------------------
