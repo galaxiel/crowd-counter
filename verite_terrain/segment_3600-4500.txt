@@ -1,0 +1,7 @@
+# Vérité terrain — franchissements vus à la main.
+# Un numéro de frame par ligne : celui affiché en jaune sur la vidéo
+# lente, au moment où la personne est SUR la ligne verte.
+# `#` pour un commentaire, lignes vides acceptées.
+#
+# Compléter PUIS lancer :
+#   python tools/verite_terrain.py comparer D:/Bureau/projet manif/crowd-counter/verite_terrain/segment_3600-4500.txt
