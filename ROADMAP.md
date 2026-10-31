@@ -45,8 +45,8 @@ Effort : `S` < 1 h, `M` 1-4 h, `L` une journée ou plus.
 
 | Item | État au 30/10 | Suite |
 |---|---|---|
-| 1. Banc de vérité terrain | outillage committé, vidéo lente produite | **annotation humaine** puis `comparer` |
-| 2. CI GitHub Actions | workflow committé | preuve = premier push vert |
+| 1. Banc de vérité terrain | outillage committé, vidéo lente produite, gabarit versionné | **annotation humaine** puis `comparer` |
+| 2. CI GitHub Actions | **prouvé** : 1er run rouge (teardown Qt), correctif, 2 runs verts | surveiller les prochains pushes |
 | 3. opencv-headless | bascule faite + mesurée : gain réel **0,5 Mo** (plus de Qt dans la wheel 5.x) | bascule maintenue (bon paquet), pas pour le poids |
 | 4. imgsz sur la bande | **mesuré** (32 à 640/704, 36 à 1280) | décision après vérité terrain |
 | 5. Double sens | **rejeté** par l'opérateur | — |
@@ -107,8 +107,15 @@ cassé qui tourne en rouge.
 `.github/workflows/tests.yml` — Ubuntu, Python 3.11, torch CPU (index
 dédié, même index pour torchvision), cache pip clé sur `requirements.txt`,
 `QT_QPA_PLATFORM=offscreen` avec les libs système, purge opencv identique à
-`docs/BUILDING.md`, `pytest -m "not slow"`. La preuve reste à faire : le
-dépôt n'a pas encore été pushé (16+ commits locaux) — le premier push donne la pastille.
+`docs/BUILDING.md`, `pytest -m "not slow"`. **Preuve faite : premier push
+vert… après un rouge.** Le tout premier run a échoué (exit 139) alors que
+les 553 tests étaient tous passés : un segfault de **teardown PySide6** à
+la fermeture du processus (Linux offscreen, « shared QObject was deleted
+directly ») — le GC détruit les objets Qt dans un ordre arbitraire à la
+sortie de l'interpréteur. Correctif racine (`7a29bb5`) : fixture de
+session dans `tests/conftest.py` qui ferme et supprime les top-level
+widgets et vide la file `DeferredDelete` **pendant** la session. Deux
+exécutions vertes consécutives ensuite (`7a29bb5`, `6c230df`).
 
 ### 3. `opencv-python` → `opencv-python-headless` — effort `S`
 
