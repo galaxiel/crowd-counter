@@ -111,15 +111,6 @@ La suite de tests passe sur l'arbre source ; le `.exe` n'a que ce que le build l
 toute modification des exclusions de paquets, lancer le binaire et vérifier sa fenêtre — un code de
 sortie 0 ne prouve rien.
 
-## Pistes déjà testées et mortes — ne pas retester
-
-- analyser la bande à sa résolution native (720 au lieu de 1280) : −14 % de comptes ;
-- sauter une frame sur deux : −13,4 % de comptes (le tracker perd l'association) ;
-- ByteTrack : moins fiable que l'IoU simple à cette taille de tête (20-29 px) ;
-- densimétrie / comptage par zone, mémoire prédictive de trajectoire.
-
-Augmenter `survie_max` au-delà de 30 ne gagne que 3 % de compte mais fausse `presents_max`.
-
 ## Licence
 
 MIT pour le code uniquement. Les poids `.pt` (`tetes-*.pt`) ne sont pas dans le dépôt et gardent

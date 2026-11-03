@@ -1,8 +1,8 @@
 # Roadmap
 
 État des lots livrés et candidats à venir. `AGENTS.md` reste la référence pour
-les conventions de travail, l'interpréteur et les pistes mortes — ce fichier ne
-les répète pas, il les complète.
+les conventions de travail et l'interpréteur — ce fichier ne les répète pas,
+il les complète.
 
 Règle du dépôt : **un candidat n'est retenu qu'après mesure ou validation
 explicite**, jamais parce qu'il « a l'air bon ». Chaque item ci-dessous dit
@@ -49,9 +49,8 @@ Effort : `S` < 1 h, `M` 1-4 h, `L` une journée ou plus.
 | 2. CI GitHub Actions | **prouvé** : 1er run rouge (teardown Qt), correctif, 2 runs verts | surveiller les prochains pushes |
 | 3. opencv-headless | bascule faite + mesurée : gain réel **0,5 Mo** (plus de Qt dans la wheel 5.x) | bascule maintenue (bon paquet), pas pour le poids |
 | 4. imgsz sur la bande | **mesuré** (32 à 640/704, 36 à 1280) | décision après vérité terrain |
-| 5. Double sens | **rejeté** par l'opérateur | — |
-| 6. Reprise au scrub | gardée, sans mémoire | à rouvrir sur besoin réel |
-| 7. Pipeline décodage ‖ GPU | au chaud | seulement si profil > 25 % décodage |
+| 5. Reprise au scrub | gardée, sans mémoire | à rouvrir sur besoin réel |
+| 6. Pipeline décodage ‖ GPU | au chaud | seulement si profil > 25 % décodage |
 
 ### 1. Banc de vérité terrain annoté — effort `M`
 
@@ -171,20 +170,7 @@ bien 4 faux comptes ne se tranche qu'avec le banc de vérité terrain (item 1).
 gagnerait du débit mais pourrait perdre de vrais manifestants — ou en
 retirer de faux, impossible à le dire avec un seul total.
 
-### 5. Double sens en une passe — effort `L` — **REJETÉ (30/10)**
-
-**Ce que c'est.** Le moteur compte aujourd'hui dans **un** sens
-(`config.sens`). Pour les flux bidirectionnels (départs et retours sur la même
-voie), l'opérateur doit lancer deux analyses séparées. Le moteur pourrait
-franchir dans les deux sens et exposer deux totaux.
-
-**Décision de l'opérateur (30/10) : rejeté.** Les personnes qui vont dans
-l'autre sens sont des **passants**, pas des manifestants — ne pas les compter
-est le comportement voulu. Le fonctionnement actuel (`sens=-1` ne compte que
-le sens du cortège, l'autre est ignoré par conception) est déjà exactement
-celui demandé. Ne pas rouvrir sans changement de besoin réel.
-
-### 6. Reprise au scrub / recalcul par segment — effort `L` — **idée conservée, sans mémoire**
+### 5. Reprise au scrub / recalcul par segment — effort `L` — **idée conservée, sans mémoire**
 
 **Ce que c'est.** Relancer l'analyse à un point de la vidéo (ou sur un segment
 seul) après un changement de réglage, sans repasser par le début.
@@ -201,10 +187,10 @@ humain plus simple) pour **comparer à un comptage à la main**. Une reprise à
 froid ne doit donc PAS prétendre reproduire le total d'une analyse continue —
 elle sert de banc de comparaison, pas de raccourci de calcul. La comparaison
 moteur vs humain est déjà fournie par l'item 1 (`tools/verite_terrain.py
-comparer`, qui accepte un segment libre et une tolérance) : rouvrir l'item 6
+comparer`, qui accepte un segment libre et une tolérance) : rouvrir l'item 5
 uniquement si un vrai besoin d'analyse interactive apparaît.
 
-### 7. Pipeline décodage ‖ inférence — effort `M-L` — **au chaud**
+### 6. Pipeline décodage ‖ inférence — effort `M-L` — **au chaud**
 
 **Ce que c'est.** Dans le worker d'analyse, le décodage (cv2) et l'inférence
 (GPU) s'exécutent en séquence. Un couple producteur/consommateur masquerait
@@ -307,8 +293,3 @@ compte coûte cher. Ne pas rouvrir sans changement de besoin réel.
 avertissements tombent sur des franchissements humains réels (passages
 rapides bien manqués), le déclencheur est juste ; s'ils pleuvent sur des
 naissances de piste normales le long de la ligne, resserrer le déclencheur.
-
-## Hors périmètre assumé
-
-ByteTrack, bande native, saut de frame, FP16, densimétrie : pistes mesurées et
-mortes, liste dans `AGENTS.md`. Ne pas les rouvrir sans donnée nouvelle.
