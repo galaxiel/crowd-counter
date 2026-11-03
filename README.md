@@ -349,6 +349,8 @@ Other limitations:
   (`analyser_video` is a function `video + config -> result`); the decision is
   deferred.
 
+Counting depends on the lighting, the framing and the video resolution.
+
 ## Architecture
 
 ```
