@@ -214,7 +214,8 @@ a bloated one.
 
 ## Using the software
 
-Load a video, draw the line (two clicks), pick the counted direction, run.
+Load a video (from the button, or **drag it onto the window**), draw the line
+(two clicks), pick the counted direction, run.
 The interface comes in **four themes** — dark (default), light, navy blue,
 follow Windows — picked from the selector at the end of the button bar; the
 choice is remembered from one launch to the next. The full walkthrough — the

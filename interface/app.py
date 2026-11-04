@@ -118,6 +118,12 @@ FILTRES_VIDEOS = (
     "Vidéos (*.mp4 *.avi *.mkv *.mov *.m4v *.webm);;Tous les fichiers (*)"
 )
 
+#: Extensions acceptées en glisser-déposer — le même ensemble que
+#: `FILTRES_VIDEOS`, en minuscules : le dépôt ne doit pas accepter plus (ou
+#: moins) que le sélecteur, sinon deux façons de charger diraient deux
+#: choses différentes.
+EXTENSIONS_VIDEO = frozenset({".mp4", ".avi", ".mkv", ".mov", ".m4v", ".webm"})
+
 #: Mémoire du dernier dossier vidéo ouvert, entre deux lancements.
 #:
 #: Le dialogue « Charger la vidéo » partait toujours du dossier courant —
@@ -325,6 +331,10 @@ class FenetrePrincipale(QMainWindow):
         super().__init__()
         self.setWindowTitle(f"Compteur de manifestation — {VERSION}")
         self.resize(1400, 850)
+        # Glisser-déposer d'une vidéo : accepté au niveau de la FENÊTRE — les
+        # enfants (vue vidéo, panneaux) ne réclament pas de dépôt, les
+        # événements remontent donc jusqu'ici.
+        self.setAcceptDrops(True)
 
         self.config: Config = Config.defauts()
         self.cap = None
@@ -537,7 +547,7 @@ class FenetrePrincipale(QMainWindow):
         self.label_avertissement.setVisible(False)
         colonne.addWidget(self.label_avertissement)
 
-        self.label_statut = QLabel("Charge une vidéo pour commencer.")
+        self.label_statut = QLabel("Charge une vidéo (ou glisse-la ici) pour commencer.")
         self.label_statut.setObjectName("sous_titre")
         self.label_statut.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.label_statut.setWordWrap(True)
@@ -978,6 +988,54 @@ class FenetrePrincipale(QMainWindow):
         if dossier and pathlib.Path(dossier).is_dir():
             return dossier
         return ""
+
+    # -- Glisser-déposer ---------------------------------------------------
+
+    def _chemin_de_la_depose(self, mime_data) -> str | None:
+        """Chemin de la vidéo déposée, ou ``None`` si le dépôt est refusé.
+
+        Les mêmes règles que le sélecteur de fichier : UNE seule url, une
+        extension vidéo (`EXTENSIONS_VIDEO`), et pas d'analyse en cours —
+        un fichier lâché pendant un comptage ne doit pas l'arrêter en
+        silence, c'est exactement l'accident que le dépôt ne doit pas
+        permettre. La validation par EXTENSION (pas par contenu) est
+        délibérée : le chargement, lui, vérifie réellement le fichier et
+        affiche l'erreur s'il est illisible.
+        """
+        if self._en_analyse:
+            return None
+        urls = mime_data.urls() if mime_data.hasUrls() else []
+        if len(urls) != 1:
+            return None
+        chemin = urls[0].toLocalFile()
+        if not chemin or pathlib.Path(chemin).suffix.lower() not in EXTENSIONS_VIDEO:
+            return None
+        return chemin
+
+    def dragEnterEvent(self, event) -> None:  # noqa: N802 (API Qt)
+        chemin = self._chemin_de_la_depose(event.mimeData())
+        if chemin is None:
+            event.ignore()
+            return
+        event.acceptProposedAction()
+
+    def dragMoveEvent(self, event) -> None:  # noqa: N802 (API Qt)
+        # Sans acceptation du move, le drop n'arrive jamais par-dessus les
+        # enfants (la vue vidéo occupe presque tout l'écran).
+        if self._chemin_de_la_depose(event.mimeData()) is not None:
+            event.acceptProposedAction()
+        else:
+            event.ignore()
+
+    def dropEvent(self, event) -> None:  # noqa: N802 (API Qt)
+        chemin = self._chemin_de_la_depose(event.mimeData())
+        if chemin is None:
+            event.ignore()
+            return
+        event.acceptProposedAction()
+        # `charger_video` affiche lui-même l'erreur si le fichier est
+        # illisible — le dépôt ne duplique aucun contrôle.
+        self.charger_video(chemin)
 
     def charger_video(self, chemin: str) -> bool:
         """Ouvre ``chemin`` et affiche sa première frame. Faux si illisible."""

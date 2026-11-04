@@ -8,6 +8,15 @@ notes de release détaillées (anglais) accompagnent chaque version sur la
 Les poids `.pt` ne sont pas dans les archives : les modèles `tetes-*.pt`
 doivent être posés dans `modeles/` (voir le README).
 
+## [2.6.1] — 2026-11-04
+
+### Ajouté
+
+- **Glisser-déposer d'une vidéo** : dépose un fichier vidéo n'importe où sur
+  la fenêtre pour la charger. Mêmes règles que le sélecteur de fichier
+  (une seule vidéo, mêmes extensions) ; refusé pendant une analyse en
+  cours — un dépôt ne doit pas arrêter un comptage.
+
 ## [2.6.0] — 2026-11-04
 
 ### Ajouté
