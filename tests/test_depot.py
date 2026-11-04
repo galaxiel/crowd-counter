@@ -64,37 +64,37 @@ def _mime_avec(*chemins: str) -> QMimeData:
 # -- Validation du dépôt ---------------------------------------------------
 
 
-def test_une_video_est_acceptee(application):
+def test_une_video_est_acceptee(application, tmp_path):
     fenetre = FenetrePrincipale()
     try:
-        chemin = fenetre._chemin_de_la_depose(_mime_avec("D:/scenes/manif.mp4"))
-        assert chemin == "D:/scenes/manif.mp4"
+        chemin = str(tmp_path / "manif.mp4")
+        assert fenetre._chemin_de_la_depose(_mime_avec(chemin)) == chemin
     finally:
         fenetre.close()
 
 
-def test_extension_majuscule_est_acceptee(application):
+def test_extension_majuscule_est_acceptee(application, tmp_path):
     fenetre = FenetrePrincipale()
     try:
-        assert fenetre._chemin_de_la_depose(_mime_avec("D://VIDEO.MP4")) is not None
+        assert fenetre._chemin_de_la_depose(_mime_avec(str(tmp_path / "VIDEO.MP4"))) is not None
     finally:
         fenetre.close()
 
 
-def test_fichier_non_video_refuse(application):
+def test_fichier_non_video_refuse(application, tmp_path):
     fenetre = FenetrePrincipale()
     try:
-        assert fenetre._chemin_de_la_depose(_mime_avec("D:/notes.txt")) is None
-        assert fenetre._chemin_de_la_depose(_mime_avec("D:/image.png")) is None
+        assert fenetre._chemin_de_la_depose(_mime_avec(str(tmp_path / "notes.txt"))) is None
+        assert fenetre._chemin_de_la_depose(_mime_avec(str(tmp_path / "image.png"))) is None
     finally:
         fenetre.close()
 
 
-def test_plusieurs_fichiers_refuses(application):
+def test_plusieurs_fichiers_refuses(application, tmp_path):
     fenetre = FenetrePrincipale()
     try:
         assert fenetre._chemin_de_la_depose(
-            _mime_avec("D:/a.mp4", "D:/b.mp4")
+            _mime_avec(str(tmp_path / "a.mp4"), str(tmp_path / "b.mp4"))
         ) is None
     finally:
         fenetre.close()
@@ -108,12 +108,12 @@ def test_sans_url_refuse(application):
         fenetre.close()
 
 
-def test_pendant_une_analyse_tout_est_refuse(application):
+def test_pendant_une_analyse_tout_est_refuse(application, tmp_path):
     """Un dépôt ne doit pas arrêter un comptage en route — même une vidéo valide."""
     fenetre = FenetrePrincipale()
     try:
         fenetre._en_analyse = True
-        assert fenetre._chemin_de_la_depose(_mime_avec("D:/a.mp4")) is None
+        assert fenetre._chemin_de_la_depose(_mime_avec(str(tmp_path / "a.mp4"))) is None
     finally:
         fenetre._en_analyse = False
         fenetre.close()
@@ -132,11 +132,11 @@ def test_extensions_alignees_sur_le_selecteur():
 def test_drag_enter_accepte_et_refuse(application):
     fenetre = FenetrePrincipale()
     try:
-        entre = _EvenementFaux(_mime_avec("D:/a.mp4"))
+        entre = _EvenementFaux(_mime_avec("a.mp4"))
         fenetre.dragEnterEvent(entre)
         assert entre.accepte and not entre.refuse
 
-        entre = _EvenementFaux(_mime_avec("D:/a.txt"))
+        entre = _EvenementFaux(_mime_avec("a.txt"))
         fenetre.dragEnterEvent(entre)
         assert entre.refuse and not entre.accepte
     finally:
