@@ -8,6 +8,18 @@ notes de release détaillées (anglais) accompagnent chaque version sur la
 Les poids `.pt` ne sont pas dans les archives : les modèles `tetes-*.pt`
 doivent être posés dans `modeles/` (voir le README).
 
+## [2.6.2] — 2026-11-04
+
+### Corrigé
+
+- **L'interface gelait dès le début d'une mise à jour** (fenêtre « ne
+  réponds plus » dès le premier bloc téléchargé). Cause : la barre de
+  progression était branchée sur une lambda sans objet récepteur, donc
+  exécutée dans le thread réseau — `setValue` appelé hors du fil IHM.
+  La progression passe maintenant par un slot de la fenêtre, avec un test
+  de non-régression qui émet depuis un fil secondaire et vérifie le fil
+  d'exécution.
+
 ## [2.6.1] — 2026-11-04
 
 ### Ajouté

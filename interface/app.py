@@ -826,14 +826,27 @@ class FenetrePrincipale(QMainWindow):
         self._worker_maj = _InstallationMaj(info, dossier)
         self._worker_maj.moveToThread(self._thread_maj)
         self._thread_maj.started.connect(self._worker_maj.run)
-        self._worker_maj.progression.connect(
-            lambda faits, total: dialogue.setValue(int(faits * 100 / max(1, total)))
-        )
+        # La progression passe par un SLOT DE LA FENÊTRE, pas par une lambda :
+        # une connexion sans objet récepteur s'exécute dans le thread ÉMETTEUR
+        # (le thread réseau), et toucher un widget Qt depuis là gèle
+        # l'interface — mesuré en conditions réelles le 04/11 (fenêtre
+        # « ne réponds plus » dès le premier bloc de téléchargement).
+        self._worker_maj.progression.connect(self._maj_progression)
         self._worker_maj.etape.connect(dialogue.setLabelText)
         self._worker_maj.echouee.connect(self._maj_echouee)
         self._worker_maj.prete.connect(self._maj_prete)
         dialogue.canceled.connect(self._worker_maj.annuler)
         self._thread_maj.start()
+
+    def _maj_progression(self, faits: int, total: int) -> None:
+        """Progression du téléchargement — REÇUE sur le fil de l'IHM.
+
+        Slot de la fenêtre exprès : c'est lui qui donne à la connexion un
+        objet récepteur, donc le bon fil d'exécution (voir le commentaire
+        du branchement dans `_installer_maj`).
+        """
+        if self._dialogue_maj is not None:
+            self._dialogue_maj.setValue(int(faits * 100 / max(1, total)))
 
     @staticmethod
     def _info_mo(info: dict) -> int:
