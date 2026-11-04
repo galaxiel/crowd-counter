@@ -47,6 +47,13 @@ build-env\Scripts\python -m PyInstaller --clean --workpath build/v2 crowd-counte
 build-env\Scripts\python tools/copier_modeles.py
 ```
 
+The spec also embeds two things at build time, both loud-fail if missing:
+the **application icon** (`resources/crowd-counter.ico` — title bar, taskbar,
+Explorer) and the **version resource** shown in the exe's Properties →
+Details, **derived from `compteur.VERSION`** on every build — the single
+source of truth, so the exe cannot lie about its version and every update
+carries its own number automatically.
+
 **torch and torchvision must come from the same index.** A CPU-only
 torchvision next to a CUDA torch crashes `torchvision::nms` on CUDA. This is
 the single most common packaging mistake here.

@@ -8,18 +8,22 @@ notes de release détaillées (anglais) accompagnent chaque version sur la
 Les poids `.pt` ne sont pas dans les archives : les modèles `tetes-*.pt`
 doivent être posés dans `modeles/` (voir le README).
 
+## [Non publié]
+
+### Corrigé
+
+- **Le script d'échange de la mise à jour ne pouvait jamais réussir** : le
+  chemin de la nouvelle version repartait du nom du dossier d'étape ALORS
+  QUE `%~dp0` désigne déjà ce dossier — chemin doublé, inexistant, `move`
+  en échec silencieux, repli à l'ancienne version sans relance. Trouvé par
+  le premier test réel bout-en-bout (l'app tournait depuis le dossier
+  d'étape). Toute mise à jour DEPUIS une version ≤ 2.6.3 échoue au même
+  endroit, sans danger (compléter à la main depuis le dossier `.maj-X`) ;
+  depuis la 2.6.4, l'échange est automatique pour de bon.
+- **Identité de barre des tâches explicite** (AppUserModelID) : sans elle,
+  Windows peut afficher l'icône en cache des builds précédents.
+
 ## [2.6.3] — 2026-11-04
-
-### Ajouté
-
-- **Icône de l'application** (foule cyan sur fond noir) : barre de titre,
-  barre des tâches, écran d'installation et icône du `.exe` lui-même
-  (gravée par PyInstaller).
-- **Propriétés de version de l'exe** (clic droit → Propriétés → Détails) :
-  dérivées de `compteur.VERSION` à chaque build — source de vérité unique,
-  l'exe porte automatiquement sa version après chaque mise à jour.
-
-## [2.6.2] — 2026-11-04
 
 ### Ajouté
 

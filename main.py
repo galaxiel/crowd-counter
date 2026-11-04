@@ -52,6 +52,22 @@ def main() -> int:
 
     app = QApplication(sys.argv)
 
+    # Identité de barre des tâches (AppUserModelID). Sans elle, Windows
+    # rattache l'app à son exe et peut afficher l'icône EN CACHE des builds
+    # précédents (le chemin ne change pas d'un build à l'autre, le cache
+    # d'icônes de l'Explorateur si). L'AUMID explicite donne à l'app sa
+    # propre identité de taskbar, regroupement compris. Windows uniquement,
+    # échec ignoré : c'est de la cosmétique, jamais une condition.
+    if sys.platform == "win32":
+        try:
+            import ctypes
+
+            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(
+                "galaxiel.CompteurManifestation"
+            )
+        except OSError:
+            pass
+
     # ⚠ `interface.app` N'EST PAS IMPORTÉ ICI, et c'est délibéré.
     #
     # `interface/app.py` fait `import cv2` au chargement du module, et `cv2`

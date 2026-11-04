@@ -53,9 +53,9 @@ Avant de travailler, vérifier d'un coup :
 
 ## Tests
 
-- Porte de routine rapide : `python -m pytest tests/ -q -m "not slow"` (589 tests, ~10 s).
+- Porte de routine rapide : `python -m pytest tests/ -q -m "not slow"` (606 tests, ~10 s).
 - Suite complète (62 tests `slow` en plus : sous-processus `installer.py`, détection GPU réelle) :
-  `python -m pytest tests/ -q` — **651 tests, ~11 s, 0 échec** (vérifié le 04/11/2026).
+  `python -m pytest tests/ -q` — **668 tests, ~13 s, 0 échec** (vérifié le 05/11/2026).
   La suite ne charge jamais torch en inférence : elle est lente par nature uniquement
   à cause des sous-processus.
 - CI GitHub Actions (`.github/workflows/tests.yml`) lance la passe rapide à chaque push :
