@@ -8,7 +8,18 @@ notes de release détaillées (anglais) accompagnent chaque version sur la
 Les poids `.pt` ne sont pas dans les archives : les modèles `tetes-*.pt`
 doivent être posés dans `modeles/` (voir le README).
 
-## [Non publié]
+## [2.6.3] — 2026-11-04
+
+### Ajouté
+
+- **Icône de l'application** (foule cyan sur fond noir) : barre de titre,
+  barre des tâches, écran d'installation et icône du `.exe` lui-même
+  (gravée par PyInstaller).
+- **Propriétés de version de l'exe** (clic droit → Propriétés → Détails) :
+  dérivées de `compteur.VERSION` à chaque build — source de vérité unique,
+  l'exe porte automatiquement sa version après chaque mise à jour.
+
+## [2.6.2] — 2026-11-04
 
 ### Ajouté
 
