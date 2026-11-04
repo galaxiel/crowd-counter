@@ -37,7 +37,7 @@ import time
 
 import cv2
 from PySide6.QtCore import QObject, QThread, QTimer, QUrl, Qt, Signal
-from PySide6.QtGui import QDesktopServices, QKeySequence, QShortcut
+from PySide6.QtGui import QDesktopServices, QIcon, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QApplication,
     QComboBox,
@@ -82,6 +82,7 @@ from interface.panneau_reglages import (
     orientation_par_defaut_sens,
 )
 from interface.recap import PanneauRecap, formater_duree
+from interface.ressources import chemin_icone
 from interface.style import (  # noqa: F401  (ré-export pour main.py)
     CHOIX_THEME,
     MODE_DEFAUT,
@@ -335,6 +336,13 @@ class FenetrePrincipale(QMainWindow):
         # enfants (vue vidéo, panneaux) ne réclament pas de dépôt, les
         # événements remontent donc jusqu'ici.
         self.setAcceptDrops(True)
+        # Icône de fenêtre (barre de titre + barre des tâches). Reprise au
+        # niveau application par `main.py` pour l'écran d'installation ; la
+        # refaire ICI rend la fenêtre correcte même construite hors de
+        # `main.py` (tests).
+        icone = QIcon(str(chemin_icone()))
+        if not icone.isNull():
+            self.setWindowIcon(icone)
 
         self.config: Config = Config.defauts()
         self.cap = None

@@ -147,12 +147,74 @@ def _trouver_uv():
 
 UV_EXE = _trouver_uv()
 
+#: Icône de l'application — gravée dans l'exe (Explorateur, barre des
+#: tâches) ET embarquée comme donnée pour l'icône de fenêtre à l'exécution
+#: (`interface/ressources.py`). Le build échoue bruyamment si elle manque :
+#: une release sans icône ne doit pas pouvoir partir.
+CHEMIN_ICONE = RACINE / "resources" / "crowd-counter.ico"
+if not CHEMIN_ICONE.is_file():
+    raise SystemExit("icône manquante : resources/crowd-counter.ico")
+
+#: Ressource de VERSION de l'exe (clic droit → Propriétés → Détails).
+#: DÉRIVÉE de `compteur.VERSION` à CHAQUE build — source de vérité unique :
+#: l'exe ne peut pas mentir sur sa version, et une mise à jour (qui remplace
+#: l'exe entier) porte automatiquement la sienne. Écrite dans build/
+#: (gitignoré, regénéré) ; le format est évalué par PyInstaller comme du
+#: Python. `from compteur import VERSION` est sûr ici : `compteur/__init__`
+#: n'importe ni torch ni cv2.
+from compteur import VERSION as _VERSION_APP  # noqa: E402
+
+_parties_version = [int(p) for p in _VERSION_APP.split(".")]
+_parties_version += [0] * (4 - len(_parties_version))
+_fichier_version = RACINE / "build" / "version_ressource.txt"
+_fichier_version.parent.mkdir(parents=True, exist_ok=True)
+_fichier_version.write_text(f"""# Généré par crowd-counter.spec — ne pas éditer (dérivé de compteur.VERSION).
+VSVersionInfo(
+  ffi=FixedFileInfo(
+    filevers=tuple({_parties_version!r}),
+    prodvers=tuple({_parties_version!r}),
+    mask=0x3f,
+    flags=0x0,
+    OS=0x40004,
+    fileType=0x1,
+    subtype=0x0,
+    date=(0, 0),
+  ),
+  kids=[
+    StringFileInfo(
+      [
+        # Sans StringTable, les chaînes n'atterrissent pas dans la
+        # ressource (FileVersionRaw reste lisible, les champs texte vides) —
+        # mesuré le 04/11. '040904B0' = en-US + Unicode.
+        StringTable(
+          '040904B0',
+          [
+            StringStruct('CompanyName', 'galaxiel'),
+            StringStruct('FileDescription', 'Compteur de manifestation'),
+            StringStruct('FileVersion', '{_VERSION_APP}'),
+            StringStruct('InternalName', 'CompteurManifestation'),
+            StringStruct('LegalCopyright', 'MIT License'),
+            StringStruct('OriginalFilename', 'CompteurManifestation.exe'),
+            StringStruct('ProductName', 'Compteur de manifestation'),
+            StringStruct('ProductVersion', '{_VERSION_APP}'),
+          ]
+        ),
+      ]
+    ),
+    VarFileInfo([VarStruct('Translation', [1033, 1200])]),
+  ],
+)
+""", encoding="utf-8")
+
 a = Analysis(
     [str(RACINE / "main.py")],
     pathex=[str(RACINE)],
     binaries=[],
     datas=[
         (str(RACINE / "config" / "default.json"), "config"),
+        # L'icône de fenêtre, chargée depuis le disque à l'exécution
+        # (`interface/ressources.py` — même mécanisme que default.json).
+        (str(CHEMIN_ICONE), "resources"),
         # `uv.exe` part dans `_internal/`, donc dans `sys._MEIPASS`. C'est le
         # premier endroit que `compteur.telechargement.uv_exe` cherche.
         (str(UV_EXE), "."),
@@ -306,6 +368,8 @@ _COMMUN_EXE = dict(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
+    icon=str(CHEMIN_ICONE),
+    version=str(_fichier_version),
 )
 
 if ONEFILE:

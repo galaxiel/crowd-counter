@@ -72,11 +72,22 @@ def main() -> int:
     # L'import reste dans cette fonction, et non au niveau du module, pour
     # que PyInstaller continue de voir le chemin d'import à analyser.
     from interface.demarrage import preparer
+    from interface.ressources import chemin_icone
     from interface.style import appliquer_style, lire_modele_theme
 
     # Thème mémorisé du poste (config/local_theme.json) — relu ICI, avant
     # toute fenêtre, pour que même l'écran d'installation sorte au bon thème.
     appliquer_style(app, lire_modele_theme())
+
+    # Icône au niveau APPLICATION : l'écran d'installation, les dialogues et
+    # la barre des tâches l'ont dès le premier instant. La fenêtre principale
+    # la repositionne elle-même (`interface.app`) pour rester correcte même
+    # construite hors de `main.py` (tests).
+    from PySide6.QtGui import QIcon
+
+    icone = QIcon(str(chemin_icone()))
+    if not icone.isNull():
+        app.setWindowIcon(icone)
 
     # Téléchargement au premier lancement, avec fenêtre de progression.
     # `preparer` ne lève jamais : au pire il renvoie un état « absent », et
