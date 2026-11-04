@@ -384,22 +384,34 @@ def texte_script_echange() -> str:
     return f"""@echo off
 rem Echange de l'installation - genere par CompteurManifestation.
 rem Etapes : attendre la sortie de l'exe, renommer l'ancienne installation
-rem (sauvegarde), mettre la nouvelle a sa place, la relancer.
+rem (sauvegarde), mettre la nouvelle a sa place, la relancer. Chaque etape
+rem est journalisee dans %LOCALAPPDATA%\\CompteurManifestation : un echange
+rem qui rate ne doit plus etre un silence (bug du 04/11, decouvert par
+rem l'observation du dossier, pas par un message).
 setlocal
+set "JOURNAL=%LOCALAPPDATA%\\CompteurManifestation\\journal-mise-a-jour.log"
+mkdir "%LOCALAPPDATA%\\CompteurManifestation" >nul 2>&1
+echo [%DATE% %TIME%] echange : attente de la sortie de l'exe > "%JOURNAL%"
 pushd "%~dp0.."
 :attendre
 tasklist /FI "IMAGENAME eq {EXE_NOM}" 2>nul | find /I "{EXE_NOM}" >nul && (timeout /t 1 /nobreak >nul & goto attendre)
-move /Y "CompteurManifestation" "CompteurManifestation.ancienne" >nul
+echo [%TIME%] renommage de l'ancienne installation en sauvegarde >> "%JOURNAL%"
+move /Y "CompteurManifestation" "CompteurManifestation.ancienne" >> "%JOURNAL%" 2>&1
 if errorlevel 1 goto echec
-move /Y "%~dp0CompteurManifestation" "CompteurManifestation" >nul
+echo [%TIME%] mise en place de la nouvelle version >> "%JOURNAL%"
+move /Y "%~dp0CompteurManifestation" "CompteurManifestation" >> "%JOURNAL%" 2>&1
 if errorlevel 1 goto retour
 if not exist "CompteurManifestation\\{EXE_NOM}" goto retour
+echo [%TIME%] relance de la nouvelle version >> "%JOURNAL%"
 start "" "CompteurManifestation\\{EXE_NOM}"
 popd
+echo [%TIME%] echange termine >> "%JOURNAL%"
 exit /b 0
 :retour
-move /Y "CompteurManifestation.ancienne" "CompteurManifestation" >nul
+echo [%TIME%] ECHEC : retour arriere vers l'ancienne version >> "%JOURNAL%"
+move /Y "CompteurManifestation.ancienne" "CompteurManifestation" >> "%JOURNAL%" 2>&1
 :echec
+echo [%TIME%] echange en echec - l'installation d'origine est en place >> "%JOURNAL%"
 popd
 exit /b 1
 """

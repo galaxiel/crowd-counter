@@ -297,6 +297,16 @@ class PanneauRecap(QWidget):
         grille.setColumnStretch(1, 1)
         racine.addLayout(grille)
 
+        # Les réglages qui ont produit CE total. Un opérateur qui essaie
+        # plusieurs combinaisons lit un total orphelin sinon : sans la ligne
+        # de réglages, impossible de savoir après coup quel essai a donné
+        # quel chiffre (demande opérateur du 05/11, après une session de
+        # batteries de tests).
+        self.reglages = QLabel("")
+        self.reglages.setObjectName("recap_libelle")
+        self.reglages.setWordWrap(True)
+        racine.addWidget(self.reglages)
+
         self.courbe = CourbeDebit()
         racine.addWidget(self.courbe, stretch=1)
 
@@ -328,6 +338,16 @@ class PanneauRecap(QWidget):
         self.valeurs[LIBELLE_PIC].setText(self._texte_pic(resultat, pic, fenetre))
         self.courbe.definir_points(points_de_debit(resultat))
 
+    def definir_reglages(self, texte: str) -> None:
+        """Affiche les réglages qui ont produit CE résultat, ou rien.
+
+        Un texte vide masque la ligne : le récapitulatif doit rester lisible
+        même alimenté par un compteur de test qui ne connaît pas ses propres
+        réglages.
+        """
+        self.reglages.setText(texte)
+        self.reglages.setVisible(bool(texte))
+
     def _texte_pic(self, resultat: Resultat, pic: int, fenetre: float) -> str:
         """« 147 pers/min à 1 min 12 s », ou un compte si la fenêtre est courte."""
         if pic <= 0:
@@ -349,4 +369,6 @@ class PanneauRecap(QWidget):
         """
         for valeur in self.valeurs.values():
             valeur.setText("—")
+        self.reglages.setText("")
+        self.reglages.setVisible(False)
         self.courbe.definir_points([])

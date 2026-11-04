@@ -82,3 +82,23 @@ def memoire_video_isolee(tmp_path, monkeypatch):
         "FICHIER_MEMOIRE_VIDEO",
         tmp_path / "local_dossier_video.json",
     )
+
+
+@pytest.fixture(autouse=True)
+def memoire_config_isolee(tmp_path, monkeypatch):
+    """La mémoire des derniers réglages reste DANS le test.
+
+    `closeEvent` écrit `config/local_config.json` à chaque fermeture de
+    fenêtre — la suite ferme des fenêtres par dizaines. Même contrat que
+    `memoire_video_isolee` : un test ne laisse rien derrière lui, et deux
+    tests ne se transmettent pas d'état par effet de bord.
+    """
+    try:
+        import interface.app
+    except ImportError:
+        return
+    monkeypatch.setattr(
+        interface.app,
+        "FICHIER_MEMOIRE_CONFIG",
+        tmp_path / "local_config.json",
+    )

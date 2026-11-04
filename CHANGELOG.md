@@ -10,6 +10,19 @@ doivent être posés dans `modeles/` (voir le README).
 
 ## [Non publié]
 
+### Ajouté
+
+- **Les réglages du dernier lancement sont repris au démarrage** — seuil,
+  modèle, confirmation… (la ligne tracée, elle, appartient à chaque vidéo
+  et n'est jamais mémorisée). Toute illisibilité rend les défauts.
+- **Le récapitulatif de fin rappelle les réglages qui ont produit le
+  total** (modèle, seuil, confirmation, résolution) — chaque essai devient
+  traçable à ses réglages.
+- **Journal écrit par le script d'échange de la mise à jour**
+  (`%LOCALAPPDATA%\CompteurManifestation\journal-mise-a-jour.log`) : chaque
+  étape et toute erreur sont consignées — un échange qui rate n'est plus
+  un silence.
+
 ### Corrigé
 
 - **Le script d'échange de la mise à jour ne pouvait jamais réussir** : le

@@ -134,6 +134,49 @@ EXTENSIONS_VIDEO = frozenset({".mp4", ".avi", ".mkv", ".mov", ".m4v", ".webm"})
 #: (`config/local_*.json`) : c'est une préférence d'un poste, pas du code.
 FICHIER_MEMOIRE_VIDEO = pathlib.Path("config") / "local_dossier_video.json"
 
+#: Mémoire des DERNIERS réglages utilisés, entre deux lancements. Même
+#: contrat que la mémoire de dossier vidéo : préférence d'un poste, sous le
+#: `.gitignore` (`config/local_*.json`), toute illisibilité rend les défauts.
+#: La ligne tracée n'y figure PAS (elle appartient à la vidéo, pas au poste).
+FICHIER_MEMOIRE_CONFIG = pathlib.Path("config") / "local_config.json"
+
+
+def lire_derniere_config() -> Config:
+    """Les réglages du dernier lancement, ou les défauts si rien de valide.
+
+    Toute illisibilité — fichier absent, JSON cassé, champs inconnus d'une
+    version antérieure — rend les défauts, jamais une erreur : reprendre
+    ses réglages est un confort, pas une condition au démarrage. La ligne
+    tracée est systématiquement vidée : elle appartient à la vidéo.
+    """
+    try:
+        donnees = json.loads(FICHIER_MEMOIRE_CONFIG.read_text(encoding="utf-8"))
+        config = Config.depuis_dict(donnees)
+        config.ligne = None
+        return config
+    except (OSError, ValueError, TypeError, KeyError, AttributeError) as exc:
+        if FICHIER_MEMOIRE_CONFIG.exists():
+            log.info("réglages précédents illisibles, défauts appliqués : %s", exc)
+        return Config.defauts()
+
+
+def ecrire_derniere_config(config: Config) -> None:
+    """Mémorise les réglages pour le prochain lancement. N'échoue jamais.
+
+    La ligne tracée est retirée avant l'écriture : la recharger sur une
+    autre vidéo tracerait une ligne au mauvais endroit sans que l'opérateur
+    le voie — le défaut exact que la mémoire ne doit pas créer.
+    """
+    try:
+        donnees = config.vers_dict()
+        donnees["ligne"] = None
+        FICHIER_MEMOIRE_CONFIG.parent.mkdir(parents=True, exist_ok=True)
+        FICHIER_MEMOIRE_CONFIG.write_text(
+            json.dumps(donnees, ensure_ascii=False), encoding="utf-8"
+        )
+    except (OSError, ValueError, TypeError) as exc:
+        log.warning("réglages non mémorisés : %s", exc)
+
 
 def lire_dernier_dossier() -> str:
     """Dossier de la dernière vidéo ouverte, ou `""` si mémoire absente.
@@ -344,7 +387,11 @@ class FenetrePrincipale(QMainWindow):
         if not icone.isNull():
             self.setWindowIcon(icone)
 
-        self.config: Config = Config.defauts()
+        # Les réglages du DERNIER lancement, pas les défauts du dépôt : un
+        # opérateur qui a tuné son seuil hier ne doit pas le retrouver à
+        # zéro ce matin (demande opérateur 05/11). La ligne, elle, part de
+        # zéro — elle appartient à la vidéo.
+        self.config: Config = lire_derniere_config()
         self.cap = None
         #: Nombre total de frames annoncées par la vidéo chargée (0 si le
         #: conteneur ne le dit pas) : c'est le maximum de la barre de
@@ -1942,6 +1989,12 @@ class FenetrePrincipale(QMainWindow):
         except Exception as exc:  # noqa: BLE001 — l'affichage ne doit rien casser
             log.warning("récapitulatif indisponible : %s", exc)
             return
+        self.recap.definir_reglages(
+            f"Modèle : {self.config.modele} · Seuil : "
+            f"{self.config.seuil_confiance:.2f} · Confirmation : "
+            f"{self.config.frames_confirmation} f · Analyse : "
+            f"{self.config.taille_entree} px"
+        )
         self.recap.afficher(resultat)
         self.recap.setVisible(True)
 
@@ -2292,6 +2345,10 @@ class FenetrePrincipale(QMainWindow):
                 QApplication.processEvents()
                 thread_maj.wait(20)
         self._liberer_capture()
+        # Les réglages courants survivent à la fermeture (thème et dossier
+        # vidéo suivent le même principe). Best-effort : un échec d'écriture
+        # ne doit pas empêcher de fermer.
+        ecrire_derniere_config(self.config)
         super().closeEvent(event)
 
 
