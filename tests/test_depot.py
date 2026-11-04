@@ -9,6 +9,7 @@ bateau simple : le code testé n'utilise que `mimeData()`,
 `acceptProposedAction()` et `ignore()`.
 """
 
+import pathlib
 import re
 
 import cv2
@@ -68,7 +69,11 @@ def test_une_video_est_acceptee(application, tmp_path):
     fenetre = FenetrePrincipale()
     try:
         chemin = str(tmp_path / "manif.mp4")
-        assert fenetre._chemin_de_la_depose(_mime_avec(chemin)) == chemin
+        retour = fenetre._chemin_de_la_depose(_mime_avec(chemin))
+        # Comparaison via Path : QUrl.toLocalFile normalise les separateurs
+        # (avant-arriere selon l'OS), la valeur retournee reste le meme fichier.
+        assert retour is not None
+        assert pathlib.Path(retour) == pathlib.Path(chemin)
     finally:
         fenetre.close()
 
