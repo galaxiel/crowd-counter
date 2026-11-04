@@ -348,6 +348,9 @@ Other limitations:
 - **No multi-camera, no web API.** The engine is ready for an API
   (`analyser_video` is a function `video + config -> result`); the decision is
   deferred.
+- **The count depends on the lighting, framing and resolution of the
+  video.** The detector works on heads; poor lighting, an awkward framing, or
+  a low-resolution input can lower the count.
 
 ## Architecture
 
