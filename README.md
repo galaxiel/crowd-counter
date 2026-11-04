@@ -88,7 +88,7 @@ dependencies. See [Where to put the models](#where-to-put-the-models).
 
 ## Installing and running from source
 
-Python 3.11 or newer (tested on 3.14).
+Python 3.11 or newer (CI runs it on 3.11).
 
 ```bash
 python -m venv venv
@@ -189,6 +189,13 @@ Download it from the [releases page](../../releases).
 > The first launch needs internet. A machine that has neither an NVIDIA card nor
 > a working download path falls back to CPU (~200 MB), which works but is slow.
 
+> **Updates are built in.** At startup the application checks GitHub for a
+> newer release; when one exists, a green button appears at the end of the
+> button bar. One click verifies the published SHA-256, replaces the
+> application and relaunches it — settings, profiles and models you added
+> are kept, and the previous version stays in a `*.ancienne` backup folder
+> until the new one has started. Available in the packaged executable only.
+
 ## Building the executable
 
 The whole procedure lives in [`docs/BUILDING.md`](docs/BUILDING.md) — clean
@@ -208,10 +215,12 @@ a bloated one.
 ## Using the software
 
 Load a video, draw the line (two clicks), pick the counted direction, run.
-The full walkthrough — the direction reminder when the count stays at zero,
-the sensitivity settings, the end-of-analysis summary, audit mode, and how to
-read the green boxes that make a mistake visible — is in
-[`docs/USAGE.md`](docs/USAGE.md).
+The interface comes in **four themes** — dark (default), light, navy blue,
+follow Windows — picked from the selector at the end of the button bar; the
+choice is remembered from one launch to the next. The full walkthrough — the
+direction reminder when the count stays at zero, the sensitivity settings,
+the end-of-analysis summary, audit mode, and how to read the green boxes
+that make a mistake visible — is in [`docs/USAGE.md`](docs/USAGE.md).
 
 ## Design decisions and scope
 
