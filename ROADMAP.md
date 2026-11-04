@@ -293,3 +293,81 @@ compte coûte cher. Ne pas rouvrir sans changement de besoin réel.
 avertissements tombent sur des franchissements humains réels (passages
 rapides bien manqués), le déclencheur est juste ; s'ils pleuvent sur des
 naissances de piste normales le long de la ligne, resserrer le déclencheur.
+
+## v2.8 — THÈME ET MISE À JOUR (décisions du 04/11/2026)
+
+Deux items issus de l'analyse « une interface moderne à la GestyLoc ? ».
+Verdict de l'analyse, écrit ici pour ne pas la refaire : le look de GestyLoc
+vient de son DESIGN (palette Tailwind, bleu primaire `#2563eb`, cartes
+arrondies, espacement), pas de sa stack Electron/React. Il se transpose donc
+en QSS dans l'interface Qt existante. La réécriture complète en
+Electron+React+sidecar Python est ÉCARTÉE : 2-4 semaines estimées pour un
+décompte inchangé, un plan de concurrence vidéo à refaire, et le seul gain
+fonctionnel (l'auto-update) est traité par l'item 2 ci-dessous.
+
+### 1. Quatre modes de thème — effort `S` — LIVRÉ (04/11, validé par l'opérateur, release v2.5.0)
+
+**Ce que c'est.** L'interface reste sombre par défaut (raison de lisibilité
+extérieure documentée dans `interface/style.py`), avec trois modes ajoutés :
+clair, bleu marine (demande opérateur du jour même), et « suivre le système »
+(thème Windows, suivi en direct via `QStyleHints.colorSchemeChanged`).
+
+**Choix de l'opérateur (04/11).** Les modes à choisir dans l'interface,
+l'emplacement laissé à l'agent : liste déroulante « Thème » en bout de barre
+de boutons. Le défaut reste SOMBRE (pas « système ») : un défaut « système »
+ferait passer silencieusement les utilisateurs existants en clair.
+
+**Implémentation.** `interface/style.py` : `STYLE_SOMBRE`/`STYLE_CLAIR`
+(mêmes sélecteurs, contrastes recalés — compteur `#15803d` sur fond clair),
+`mode_reel()` (résout « systeme », repli propre si Qt est muet), persistance
+`config/local_theme.json` (même contrat que `local_dossier_video.json` :
+préférence d'un poste, sous `.gitignore`, toute illisibilité rend le défaut).
+`interface/app.py` : le sélecteur applique à chaud, persiste, arme/désarme le
+suivi de l'OS ; le mode stocké est lu dans la VALEUR du choix, jamais dans
+l'indice. `main.py` : le thème est relu avant la première fenêtre (écran
+d'installation compris). Le thème n'est PAS un champ de `Config` : le panneau
+de réglages produit une config du MOTEUR, et le thème n'a rien à y faire.
+
+**Passe graphique (04/11, sur demande explicite : « tout sauf le layout »).**
+La première version des thèmes laissait le sombre presque inchangé — l'app
+était déjà sombre au bleu primaire — et l'opérateur l'a relevé. Ajouté aux
+DEUX thèmes, sans toucher au layout ni à la géométrie des clics : groupes de
+réglages en CARTES (fond détaché, coins 10 px, air intérieur), boutons
+hiérarchisés (« Lancer » plus gros et gras, aide en bouton PLAT), champs
+habillés (combos, spinboxes, liste déroulante, focus au bleu), info-bulles et
+barres de défilement dans le thème, compteur posé sur une tuile arrondie.
+Piège rencontré : la règle `QWidget` peignait les libellés d'un rectangle de
+fond de fenêtre, visible en bande sombre sur les cartes — corrigé par
+`QLabel { background: transparent; }`.
+
+**Preuve.** 14 tests (`tests/test_theme.py`) : persistance corrompue → défaut,
+résolution « systeme » avec faux QStyleHints, sélecteur de bout en bout,
+sélecteurs partagés (champs/tooltips/scrollbars présents dans les deux
+feuilles). Suite complète : **629 verts**. Captures des deux thèmes
+présentées à l'opérateur — le commit part après validation visuelle.
+
+### 2. Mise à jour automatique — effort `S` (niveau 1) / `M` (niveau 2) — CANDIDAT DÉTAILLÉ
+
+**Ce que c'est.** Aujourd'hui une release = zip manuel de 213 Mo sur GitHub
+Releases, sans mécanisme de mise à jour (l'utilisateur re-télécharge à la
+main). Deux niveaux indépendants, le 1 ne préjuge pas du 2 :
+
+- **Niveau 1 — notification + lien (`S`).** Au démarrage (ou sur demande),
+  interroger l'API GitHub (`api.github.com/repos/galaxiel/crowd-counter/
+  releases/latest`), comparer le tag à `compteur.VERSION`, et proposer :
+  « nouvelle version X.Y.Z disponible → ouvrir la page de téléchargement ».
+  Un clic ouvre le navigateur (même mécanique que le bouton de soutien).
+  Pas d'installation, pas de risque de casser l'app.
+- **Niveau 2 — installation automatique (`M`).** Télécharger le zip de la
+  release puis l'installer. Le savoir-faire de reprise/messages existe
+  (`compteur/telechargement.py` : reprise d'interruption, 404, coupure, mode
+  dégradé — mêmes règles à réutiliser). Points délicats : se remplir
+  soi-même (l'app tourne depuis le dossier à remplacer → extraire à côté et
+  permuter au redémarrage, jamais en marche), et les poids de `modeles/`
+  (dossier personnel ou livré) qui doivent survivre au remplacement.
+
+**Comment trancher.** Le niveau 1 peut partir avec le prochain lot sans
+condition. Le niveau 2 ne se lance qu'après un test complet du remplacement
+sur une installation réelle : un updater qui rate peut rendre l'app non
+démarrable, c'est le seul item de cette roadmap avec ce niveau de risque.
+Décision opérateur attendue (04/11 : « mettre ça dans la roadmap » — fait).

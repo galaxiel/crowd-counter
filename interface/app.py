@@ -40,6 +40,7 @@ from PySide6.QtCore import QObject, QThread, QTimer, QUrl, Qt, Signal
 from PySide6.QtGui import QDesktopServices, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QApplication,
+    QComboBox,
     QFileDialog,
     QHBoxLayout,
     QLabel,
@@ -80,7 +81,13 @@ from interface.panneau_reglages import (
     orientation_par_defaut_sens,
 )
 from interface.recap import PanneauRecap, formater_duree
-from interface.style import appliquer_style  # noqa: F401  (ré-export pour main.py)
+from interface.style import (  # noqa: F401  (ré-export pour main.py)
+    CHOIX_THEME,
+    MODE_DEFAUT,
+    appliquer_style,
+    ecrire_modele_theme,
+    lire_modele_theme,
+)
 from interface.widgets_video import WidgetVideo
 
 log = logging.getLogger(__name__)
@@ -307,6 +314,11 @@ class FenetrePrincipale(QMainWindow):
         #: donc repartir de la position de départ à chaque mouvement, sinon la
         #: ligne dériverait au lieu de suivre le curseur.
         self._ligne_avant_glissement: tuple | None = None
+        #: Connexion au changement de thème de l'OS (mode « suivre le
+        #: système »). Référence conservée pour être débranchée proprement
+        #: quand on quitte le mode — sinon un changement d'OS écraserait un
+        #: choix manuel fait entre-temps.
+        self._connexion_schema = None
 
         self._construire()
         self._connecter()
@@ -486,6 +498,29 @@ class FenetrePrincipale(QMainWindow):
             self.btn_stop,
         ):
             barre.addWidget(b)
+
+        # Choix du thème (sombre / clair / suivre le système), en bout de
+        # barre de boutons. Ce n'est PAS un réglage du panneau : le panneau
+        # produit une Config du MOTEUR, et le thème n'a rien à y faire — ni
+        # dans les profils, ni dans la config par défaut. Le mode est
+        # persisté à chaque changement (`interface.style`) et relu au
+        # prochain démarrage par `main.py`, avant que cette fenêtre existe.
+        self.choix_theme = QComboBox()
+        for libelle, _mode in CHOIX_THEME:
+            self.choix_theme.addItem(libelle)
+        self.choix_theme.setCurrentIndex(
+            max(0, [m for _, m in CHOIX_THEME].index(lire_modele_theme()))
+        )
+        self.choix_theme.setToolTip(
+            "Thème de l'interface. « Sombre » reste le défaut recommandé : "
+            "le compteur est prévu pour être lu dehors, en plein jour. "
+            "« Suivre le système » adopte le thème clair ou sombre de "
+            "Windows, et le suit quand il change."
+        )
+        etiquette_theme = QLabel("Thème")
+        etiquette_theme.setObjectName("libelle_reglage")
+        barre.addWidget(etiquette_theme)
+        barre.addWidget(self.choix_theme)
         colonne.addLayout(barre)
 
         # Bouton de soutien, discret, tout en bas sous la barre de boutons.
@@ -523,6 +558,11 @@ class FenetrePrincipale(QMainWindow):
         self.btn_pause.clicked.connect(self._basculer_pause)
         self.btn_stop.clicked.connect(self.arreter)
         self.btn_soutenir.clicked.connect(self._on_soutenir)
+        self.choix_theme.currentIndexChanged.connect(self._on_changement_theme)
+        # Si le mode mémorisé est « suivre le système », le suivi doit être
+        # armé dès l'ouverture — pas seulement au prochain changement de
+        # thème dans le menu.
+        self._suivre_systeme(lire_modele_theme() == "systeme")
         self._installer_raccourcis()
         self.video.clic.connect(self._on_clic_video)
         self.video.deplacement.connect(self._on_deplacement_video)
@@ -536,6 +576,59 @@ class FenetrePrincipale(QMainWindow):
         # les sources, ou dans un test, c'est cette ligne qui donne un
         # indicateur honnete au lieu d'un label vide.
         self.definir_etat_torch(None)
+
+    # -- Thème ------------------------------------------------------------
+
+    def _on_changement_theme(self, _index: int) -> None:
+        """Applique le thème choisi à chaud, le mémorise pour la prochaine fois.
+
+        Le mode stocké est lu dans la VALEUR du choix, jamais dans l'indice :
+        réordonner `CHOIX_THEME` ne peut pas retourner silencieusement un
+        autre thème que celui affiché — même règle que pour le sens et le
+        périphérique dans le panneau de réglages.
+        """
+        modes = [m for _, m in CHOIX_THEME]
+        index = self.choix_theme.currentIndex()
+        mode = modes[index] if 0 <= index < len(modes) else MODE_DEFAUT
+        ecrire_modele_theme(mode)
+        self._suivre_systeme(mode == "systeme")
+        appliquer_style(QApplication.instance(), mode)
+        log.info("thème appliqué : %s", mode)
+
+    def _suivre_systeme(self, suivre: bool) -> None:
+        """Branche (ou débranche) le suivi du thème de l'OS.
+
+        En mode « suivre le système », un changement de thème Windows doit se
+        répercuter sans redémarrage. Le branchement vit sur les `QStyleHints`
+        de l'application ; le débranchement est systématique avant chaque
+        rebranchement, pour que quitter le mode laisse un choix manuel intact.
+        """
+        if self._connexion_schema is not None:
+            try:
+                QApplication.instance().styleHints().colorSchemeChanged.disconnect(
+                    self._connexion_schema
+                )
+            except (RuntimeError, TypeError):
+                pass  # connexion déjà morte (fenêtre en fermeture)
+            self._connexion_schema = None
+        if suivre:
+            self._connexion_schema = (
+                QApplication.instance().styleHints().colorSchemeChanged.connect(
+                    self._on_schema_systeme
+                )
+            )
+
+    def _on_schema_systeme(self, *_args) -> None:
+        """Réapplique le thème quand l'OS change de mode.
+
+        Idempotent si le mode courant est sombre ou clair : `mode_reel` ne
+        réagit au système QUE pour « systeme », donc rebrancher puis réappliquer
+        ne peut pas écraser un choix manuel.
+        """
+        modes = [m for _, m in CHOIX_THEME]
+        index = self.choix_theme.currentIndex()
+        mode = modes[index] if 0 <= index < len(modes) else MODE_DEFAUT
+        appliquer_style(QApplication.instance(), mode)
 
     def _maj_peripherique(self, config: Config | None = None) -> None:
         """Recalcule et affiche « Calcul : CUDA — … » ou « Calcul : CPU … ».

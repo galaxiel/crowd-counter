@@ -72,9 +72,11 @@ def main() -> int:
     # L'import reste dans cette fonction, et non au niveau du module, pour
     # que PyInstaller continue de voir le chemin d'import à analyser.
     from interface.demarrage import preparer
-    from interface.style import appliquer_style
+    from interface.style import appliquer_style, lire_modele_theme
 
-    appliquer_style(app)
+    # Thème mémorisé du poste (config/local_theme.json) — relu ICI, avant
+    # toute fenêtre, pour que même l'écran d'installation sorte au bon thème.
+    appliquer_style(app, lire_modele_theme())
 
     # Téléchargement au premier lancement, avec fenêtre de progression.
     # `preparer` ne lève jamais : au pire il renvoie un état « absent », et

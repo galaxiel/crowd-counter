@@ -8,15 +8,19 @@ notes de release détaillées (anglais) accompagnent chaque version sur la
 Les poids `.pt` ne sont pas dans les archives : les modèles `tetes-*.pt`
 doivent être posés dans `modeles/` (voir le README).
 
-## [Non publié]
+## [2.5.0] — 2026-11-04
 
 ### Ajouté
 
-- **Trois modes de thème** — sombre (défaut), clair, suivre le système :
-  choix en bas de la fenêtre, application à chaud, suivi en direct du thème
-  Windows, mémorisé d'un lancement à l'autre (`config/local_theme.json`).
-  Le sombre reste le défaut : le compteur est prévu pour être lu dehors, en
-  plein jour.
+- **Quatre modes de thème** — sombre (défaut), clair, bleu marine, suivre le
+  système : choix en bas de la fenêtre, application à chaud, suivi en direct
+  du thème Windows, mémorisé d'un lancement à l'autre
+  (`config/local_theme.json`). Le sombre reste le défaut : le compteur est
+  prévu pour être lu dehors, en plein jour.
+- **Interface retravaillée** (dans les deux thèmes fixes) : groupes de
+  réglages en cartes, boutons hiérarchisés (« Lancer » en bouton principal),
+  champs et listes assortis au thème, info-bulles et barres de défilement
+  thémées, compteur posé sur une tuile arrondie.
 - **Banc de vérité terrain** (`tools/verite_terrain.py`) : extraction d'un
   segment en vidéo lente avec numéro de frame gravé, puis comparaison
   automatique entre les franchissements annotés à la main et les événements
