@@ -1,0 +1,126 @@
+# Changelog
+
+Toutes les évolutions notables de ce projet sont documentées ici. Le format
+s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) ; les
+notes de release détaillées (anglais) accompagnent chaque version sur la
+[page des releases GitHub](https://github.com/galaxiel/crowd-counter/releases).
+
+Les poids `.pt` ne sont pas dans les archives : les modèles `tetes-*.pt`
+doivent être posés dans `modeles/` (voir le README).
+
+## [Non publié]
+
+### Ajouté
+
+- **Trois modes de thème** — sombre (défaut), clair, suivre le système :
+  choix en bas de la fenêtre, application à chaud, suivi en direct du thème
+  Windows, mémorisé d'un lancement à l'autre (`config/local_theme.json`).
+  Le sombre reste le défaut : le compteur est prévu pour être lu dehors, en
+  plein jour.
+- **Banc de vérité terrain** (`tools/verite_terrain.py`) : extraction d'un
+  segment en vidéo lente avec numéro de frame gravé, puis comparaison
+  automatique entre les franchissements annotés à la main et les événements
+  du moteur (tolérance et appariement paramétrables). Gabarit d'annotation
+  fourni.
+- **Débit et temps restant** affichés sous la barre de progression.
+- **Raccourci Échap** pour arrêter l'analyse.
+
+### Modifié
+
+- **Chargement du modèle en arrière-plan** : la fenêtre ne gèle plus pendant
+  le chargement des poids.
+- Le modèle est **validé avant d'accepter une vidéo** ; retour visible des
+  profils de détection appliqués ; mémoire du dernier dossier vidéo ouvert.
+- **Verrou anti-rebond** du lancement d'analyse ; rapport
+  `tracks_presents_*` (trajectoires observées, diagnostics).
+- `opencv-python-headless` remplace `opencv-python` (aucune fonction
+  d'affichage d'OpenCV n'est utilisée).
+
+### Développement
+
+- **Intégration continue** : GitHub Actions lance la suite de tests à chaque
+  push (Ubuntu, torch CPU, Qt offscreen).
+- Suite de tests portée à **629 tests verts** ; correctifs d'encodage des
+  sous-processus de test ; documentation des candidats v2.7 et v2.8.
+
+## [2.4.0] — 2026-10-22
+
+### Modifié
+
+- **Modèles renommés pour que le nom dise ce qu'ils détectent**
+  (`cible-poids[-précision].pt`) : `medium.pt` → `tetes-medium.pt` (défaut),
+  `nano.pt` → `tetes-nano.pt`, `yolov8n-head.pt` → `tetes-medium-1280.pt` —
+  il n'était PAS « nano » : ses métadonnées montrent 25,9 M de paramètres,
+  la classe de `tetes-medium.pt`. Les modèles génériques 80 classes deviennent
+  `personnes-et-objets-…`.
+- Légende de nommage livrée dans `modeles/` (`LISEZ-MOI.txt`).
+
+## [2.3.0] — 2026-10-22
+
+### Ajouté
+
+- **Dossier `modeles/`** livré à côté de l'exécutable et balayé par
+  l'application : un `.pt` déposé apparaît dans la liste sans redémarrage.
+- **Dossier personnel** `%LOCALAPPDATA%\CompteurManifestation\modeles`, qui
+  survit aux mises à jour.
+- **Bouton « Parcourir… »** pour choisir un modèle n'importe où sur le
+  disque, sans le déplacer.
+
+### Corrigé
+
+- Un modèle listé depuis `modeles/` pouvait refuser de se charger
+  (« modèle introuvable ») : la liste et le chargement balaient désormais
+  les mêmes dossiers, dans le même ordre — un modèle proposé est un modèle
+  qui charge.
+
+## [2.2.0] — 2026-10-22
+
+### Ajouté
+
+- **Barre de progression** sous la vidéo (frames / total, mode « occupé » si
+  le conteneur ne déclare pas son nombre de frames).
+
+### Modifié
+
+- **Analyse ~2,6× plus rapide** : la détection passe par des lots de 4 images
+  (45 s contre 115 s sur la vidéo de référence, décompte identique vérifié
+  frame par frame) — le comptage reste strictement image par image.
+- Rendu de l'aperçu allégé (~15 i/s) : l'affichage ne bride plus l'analyse ;
+  le FP16 est retiré (décalait le décompte de −2 sans gain de vitesse).
+
+### Corrigé
+
+- Le flash rouge de comptage se déclenche aussi quand un comptage tombe
+  entre deux frames affichées (il pouvait passer totalement inaperçu).
+
+## [2.1.0] — 2026-10-05
+
+### Ajouté
+
+- **Déplacement de la ligne à la souris** : la bande suit la ligne, l'ensemble
+  est un seul objet déplaçable, verrouillé au lancement de l'analyse.
+- Les boîtes vertes des personnes comptées s'estompent après le
+  franchissement au lieu de disparaître sur la ligne.
+- Bouton de soutien ; la version s'affiche dans le titre de la fenêtre.
+
+### Modifié
+
+- **Bande de détection symétrique** (250 px de chaque côté de la ligne).
+- Le sélecteur de vitesse de présentation est retiré : l'analyse va à la
+  vitesse maximale de la machine.
+- Licence du code : MIT (les poids gardent leurs licences d'origine).
+
+## [2.0.0] — 2026-10-05
+
+### Première version de la v2
+
+- Application de bureau PySide6 : vidéo en direct, ligne à tracer au clic,
+  bande de détection, compteur géant lisible de loin, récapitulatif de fin
+  (total, durée, débit, pic, courbe).
+- Détection de têtes (SCUT-HEAD) + tracker IoU, 100 % local — aucun
+  entraînement, aucune donnée envoyée.
+- **torch n'est pas dans l'archive** : téléchargé au premier lancement
+  (version CUDA figée à celle du build, reprise d'un téléchargement
+  interrompu, mode dégradé CPU pour que le démarrage soit toujours possible).
+- Compteur de référence : 257 personnes sur les 3000 premières frames de la
+  vidéo de référence (`sens=-1`).
