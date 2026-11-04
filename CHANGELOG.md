@@ -8,7 +8,7 @@ notes de release détaillées (anglais) accompagnent chaque version sur la
 Les poids `.pt` ne sont pas dans les archives : les modèles `tetes-*.pt`
 doivent être posés dans `modeles/` (voir le README).
 
-## [Non publié]
+## [2.6.0] — 2026-11-04
 
 ### Ajouté
 
@@ -19,7 +19,8 @@ doivent être posés dans `modeles/` (voir le README).
   réglages, profils et modèles déposés sont conservés ; l'ancienne version
   reste en sauvegarde jusqu'au démarrage réussi de la nouvelle. Sans
   empreinte publiée, repli sur l'ouverture de la page de téléchargement.
-  Disponible uniquement dans l'exécutable.
+  Disponible uniquement dans l'exécutable — c'est la première release que
+  les versions suivantes pourront installer automatiquement.
 
 ## [2.5.0] — 2026-11-04
 
