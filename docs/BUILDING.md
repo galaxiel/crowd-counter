@@ -80,20 +80,24 @@ Publication happens **only on an explicit request** from the operator — the
 same rule as the build. `master` is allowed to be ahead of the last release;
 that is not an oversight to fix.
 
-This is the exact order used for v2.5.0 and v2.6.2. Do not reorder it: the
+This is the order used for v2.5.0 through v2.6.2. Do not reorder it: the
 archive is proven to start before it is zipped, and hashed before it is
-published.
+published. (An earlier draft of this section mandated a FLAT zip — that was
+wrong and would have broken the next update; see the rationale below, and
+check any procedure against `compteur/mise_a_jour.py` before trusting it.)
 
 ```bash
 # 1. prove the freshly built executable starts (see the section above)
 build-env\Scripts\python tools\verifier_lancement_exe.py
 
-# 2. zip — the archive MUST be flat: CompteurManifestation.exe, _internal/
-#    and modeles/ at the root of the zip, no wrapping folder.
-pwsh -NoProfile -Command "Compress-Archive -Path 'dist/CompteurManifestation/*' -DestinationPath 'dist/CompteurManifestationV2-vX.Y.Z-win64.zip' -Force"
+# 2. zip — the archive MUST KEEP the wrapping folder: CompteurManifestation/
+#    at the root of the zip, with the .exe, _internal/ and modeles/ inside it.
+#    Without the /* (flattening) — the updater refuses a flat archive.
+pwsh -NoProfile -Command "Compress-Archive -Path 'dist/CompteurManifestation' -DestinationPath 'dist/CompteurManifestationV2-vX.Y.Z-win64.zip' -Force"
 
-# 3. hash — from git-bash, INSIDE dist/, so the asset records a bare
-#    filename instead of a local path (see the trap below)
+# 3. hash — from git-bash, INSIDE the folder that holds the zip, so the
+#    asset records a bare filename instead of a local path (see the trap
+#    below)
 cd dist && sha256sum CompteurManifestationV2-vX.Y.Z-win64.zip | tee CompteurManifestationV2-vX.Y.Z-win64.zip.sha256
 
 # 4. put the same value as the LAST line of the release notes
@@ -110,11 +114,15 @@ gh release create vX.Y.Z \
 gh release view vX.Y.Z --json assets --jq '.assets[] | "\(.name)\t\(.digest)"'
 ```
 
-**Why the archive must be flat.** `compteur/mise_a_jour.py::extraire` extracts
-every member at its relative path *inside the application folder*. A wrapping
-`CompteurManifestation/` folder would install everything one level too deep, so
-the replace-and-relaunch step would land on a folder containing a single
-subfolder — and the next update breaks.
+**Why the zip must KEEP the `CompteurManifestation/` folder.**
+`compteur/mise_a_jour.py::preparer_staging` extracts the archive into a
+staging directory, then looks for the application at
+`staging/<folder-name>/CompteurManifestation.exe` — it derives the expected
+subfolder from the running installation's own name. A flat archive (exe at
+the root of the zip) is therefore **refused** with « archive inattendue »:
+the update fails safely, nothing is installed. The wrapping folder is not a
+cosmetic choice; it is what the updater checks for. (Verified against the
+v2.6.2 release asset before writing this paragraph.)
 
 **Why the `.zip.sha256` asset is not optional.** `lire_derniere_version` looks
 for the asset to know what to verify; without it `sha256` comes back `None` and
