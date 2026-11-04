@@ -47,13 +47,14 @@ from PySide6.QtWidgets import (
     QMainWindow,
     QMessageBox,
     QProgressBar,
+    QProgressDialog,
     QPushButton,
     QScrollArea,
     QVBoxLayout,
     QWidget,
 )
 
-from compteur import VERSION
+from compteur import VERSION, mise_a_jour
 from compteur.compteur import TAILLE_LOT_DETECTION, Compteur
 from compteur.config import (
     BANDE_APRES_PX,
@@ -225,6 +226,98 @@ class _ChargementModele(QObject):
             self.fini.emit(exc)
 
 
+class _VerificationMaj(QObject):
+    """Cherche une mise à jour HORS du fil de l'IHM (réseau, jamais bloquant).
+
+    Le même passage PROFITE du démarrage pour effacer les restes d'un
+    échange précédent (`.maj-*`, `*.ancienne`) : leur présence à ce moment
+    prouve que la nouvelle version a démarré, donc que la sauvegarde a
+    rempli son rôle. Tout échec (réseau, JSON) rend `None` — la recherche
+    est un confort, jamais une condition au démarrage.
+    """
+
+    fini = Signal(object)
+
+    def __init__(self, version: str, dossier: pathlib.Path) -> None:
+        super().__init__()
+        self._version = version
+        self._dossier = dossier
+
+    def run(self) -> None:
+        try:
+            mise_a_jour.nettoyer_anciennes(self._dossier.parent)
+        except OSError as exc:
+            log.info("nettoyage des restes de mise à jour : %s", exc)
+        try:
+            info = mise_a_jour.chercher_release(self._version)
+        except Exception as exc:  # noqa: BLE001 — le réseau est hostile
+            log.info("vérification de mise à jour ratée : %s", exc)
+            info = None
+        self.fini.emit(info)
+
+
+class _InstallationMaj(QObject):
+    """Télécharge, vérifie, prépare puis lance l'échange — hors fil de l'IHM.
+
+    Chaque étape est annoncée (`etape`) pour que le dialogue dise où on en
+    est. **Un échec n'a RIEN touché** : le zip est vérifié AVANT extraction,
+    l'ancienne installation n'est renommée que par le script d'échange, et
+    toute erreur arrive sur `echouee` avec un message lisible.
+    """
+
+    progression = Signal(int, int)
+    etape = Signal(str)
+    echouee = Signal(str)
+    prete = Signal(str)
+
+    def __init__(self, info: dict, dossier: pathlib.Path) -> None:
+        super().__init__()
+        self._info = info
+        self._dossier = dossier
+        self._annule = False
+
+    def annuler(self) -> None:
+        self._annule = True
+
+    def run(self) -> None:
+        version = self._info["version"]
+        try:
+            self.etape.emit("Téléchargement de la nouvelle version…")
+            zip_cible = self._dossier.parent / f".maj-{version}.zip"
+
+            def _prog(faits: int, total: int) -> None:
+                self.progression.emit(faits, total)
+
+            mise_a_jour.telecharger(
+                self._info["url_zip"],
+                zip_cible,
+                taille_attendue=self._info["taille_zip"],
+                progression=_prog,
+                annule=lambda: self._annule,
+            )
+            self.etape.emit("Vérification de l'archive…")
+            empreinte = mise_a_jour.sha256_fichier(zip_cible)
+            if empreinte != str(self._info["sha256"]).lower():
+                zip_cible.unlink(missing_ok=True)
+                raise mise_a_jour.ErreurReseau(
+                    "l'archive téléchargée ne correspond pas à son empreinte "
+                    "publiée — elle a été effacée, rien n'a été installé"
+                )
+            self.etape.emit("Préparation de la nouvelle version…")
+            bat = mise_a_jour.preparer_staging(zip_cible, self._dossier, version)
+            zip_cible.unlink(missing_ok=True)
+            self.etape.emit("Lancement de la nouvelle version…")
+            mise_a_jour.lancer_echange(bat)
+            self.prete.emit(version)
+        except mise_a_jour.Annulation:
+            self.echouee.emit("mise à jour annulée")
+        except (mise_a_jour.ErreurReseau, mise_a_jour.ErreurDisque) as exc:
+            self.echouee.emit(str(exc))
+        except Exception as exc:  # noqa: BLE001 — l'opérateur doit savoir
+            log.exception("installation de la mise à jour ratée")
+            self.echouee.emit(str(exc) or exc.__class__.__name__)
+
+
 class FenetrePrincipale(QMainWindow):
     """La fenêtre : vidéo à gauche, compteur et réglages à droite."""
 
@@ -319,6 +412,12 @@ class FenetrePrincipale(QMainWindow):
         #: quand on quitte le mode — sinon un changement d'OS écraserait un
         #: choix manuel fait entre-temps.
         self._connexion_schema = None
+        #: Mise à jour : thread, worker et dialogue de progression —
+        #: référencés tant qu'ils tournent (un worker non référencé est
+        #: collecté en pleine exécution, crash sans message).
+        self._thread_maj: QThread | None = None
+        self._worker_maj: QObject | None = None
+        self._dialogue_maj: QProgressDialog | None = None
 
         self._construire()
         self._connecter()
@@ -327,6 +426,7 @@ class FenetrePrincipale(QMainWindow):
         self.frames = 0
         self.maj_compteurs(0, 0, 0)
         self._maj_boutons()
+        self._verifier_mise_a_jour()
 
     # -- Construction ----------------------------------------------------
 
@@ -521,6 +621,7 @@ class FenetrePrincipale(QMainWindow):
         etiquette_theme.setObjectName("libelle_reglage")
         barre.addWidget(etiquette_theme)
         barre.addWidget(self.choix_theme)
+        self._barre_boutons = barre
         colonne.addLayout(barre)
 
         # Bouton de soutien, discret, tout en bas sous la barre de boutons.
@@ -629,6 +730,129 @@ class FenetrePrincipale(QMainWindow):
         index = self.choix_theme.currentIndex()
         mode = modes[index] if 0 <= index < len(modes) else MODE_DEFAUT
         appliquer_style(QApplication.instance(), mode)
+
+    # -- Mise à jour ------------------------------------------------------
+
+    def _verifier_mise_a_jour(self) -> None:
+        """Cherche une mise à jour en tâche de fond — EXÉCUTABLE GELÉ SEULEMENT.
+
+        En développement (`python main.py`) il n'y a rien à mettre à jour,
+        et les tests ne doivent pas toucher le réseau : le garde `frozen`
+        rend toute la fonction silencieuse hors exe. La vérification part
+        une fois, au démarrage ; un échec n'est signalé nulle part.
+        """
+        dossier = mise_a_jour.dossier_application()
+        if dossier is None:
+            return
+        self._thread_maj = QThread()
+        self._worker_maj = _VerificationMaj(VERSION, dossier)
+        self._worker_maj.moveToThread(self._thread_maj)
+        self._thread_maj.started.connect(self._worker_maj.run)
+        self._worker_maj.fini.connect(self._maj_trouvee)
+        self._worker_maj.fini.connect(self._thread_maj.quit)
+        self._thread_maj.start()
+
+    def _maj_trouvee(self, info) -> None:
+        """Une version plus récente existe : un bouton vert le dit.
+
+        Pas de dialogue imposé — le bouton n'apparaît que si une mise à
+        jour existe, et l'opérateur décide. `sha256` absent : le niveau 2
+        est refusé par conception (installer sans vérification n'est pas
+        une option), le bouton ouvre simplement la page de release — le
+        niveau 1, qui ne peut rien casser.
+        """
+        if info is None:
+            return
+        if info.get("sha256"):
+            texte = f"Nouvelle version {info['version']} — installer"
+            pourpointe = f"Mettre à jour vers {info['version']}"
+            action = lambda _=False: self._installer_maj(info)  # noqa: E731
+        else:
+            texte = f"Nouvelle version {info['version']} — voir la page"
+            pourpointe = (
+                "L'archive de cette version n'est pas accompagnée de son "
+                "empreinte : par prudence, l'installation automatique est "
+                "refusée — le bouton ouvre la page de téléchargement."
+            )
+            url = info.get("url_page", "")
+            action = lambda _=False: QDesktopServices.openUrl(QUrl(url))  # noqa: E731
+        self.btn_maj = QPushButton(texte)
+        self.btn_maj.setObjectName("maj_disponible")
+        self.btn_maj.setToolTip(pourpointe)
+        self.btn_maj.clicked.connect(action)
+        self._barre_boutons.addWidget(self.btn_maj)
+
+    def _installer_maj(self, info: dict) -> None:
+        """Confirme, puis pilote l'installation (thread + dialogue modal).
+
+        Modal : pendant le téléchargement, la fenêtre principale est
+        intouchable — pas de fermeture qui tuerait le thread en pleine
+        écriture. L'annulation est bornée (entre deux blocs réseau) et un
+        téléchargement interrompu reprendra où il en était.
+        """
+        dossier = mise_a_jour.dossier_application()
+        if dossier is None:
+            return
+        taille_mo = max(1, self._info_mo(info))
+        reponse = QMessageBox.question(
+            self,
+            "Installer la mise à jour",
+            f"Passer à la version {info['version']} ?\n\n"
+            f"L'application télécharge l'archive (~{taille_mo} Mo), vérifie "
+            "son empreinte, puis se ferme et se relance toute seule.\n\n"
+            "Réglages, profils et modèles déposés sont conservés ; "
+            "l'ancienne version reste en sauvegarde jusqu'au prochain "
+            "démarrage.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+        )
+        if reponse != QMessageBox.StandardButton.Yes:
+            return
+        dialogue = QProgressDialog("Préparation…", "Annuler", 0, 100, self)
+        dialogue.setWindowTitle("Mise à jour")
+        dialogue.setWindowModality(Qt.WindowModality.WindowModal)
+        dialogue.setMinimumDuration(0)
+        self._dialogue_maj = dialogue
+        self._thread_maj = QThread()
+        self._worker_maj = _InstallationMaj(info, dossier)
+        self._worker_maj.moveToThread(self._thread_maj)
+        self._thread_maj.started.connect(self._worker_maj.run)
+        self._worker_maj.progression.connect(
+            lambda faits, total: dialogue.setValue(int(faits * 100 / max(1, total)))
+        )
+        self._worker_maj.etape.connect(dialogue.setLabelText)
+        self._worker_maj.echouee.connect(self._maj_echouee)
+        self._worker_maj.prete.connect(self._maj_prete)
+        dialogue.canceled.connect(self._worker_maj.annuler)
+        self._thread_maj.start()
+
+    @staticmethod
+    def _info_mo(info: dict) -> int:
+        return int(info.get("taille_zip", 0)) // (1024 * 1024)
+
+    def _maj_echouee(self, message: str) -> None:
+        """Échec d'installation : dit-le, sans paniquer l'écran."""
+        if self._dialogue_maj is not None:
+            self._dialogue_maj.reset()
+            self._dialogue_maj = None
+        if message != "mise à jour annulée":
+            self._signaler(
+                "Mise à jour non installée",
+                f"L'installation n'a pas abouti — rien n'a été modifié.\n\n{message}",
+                grave=True,
+            )
+
+    def _maj_prete(self, _version: str) -> None:
+        """Échange armé : l'app se ferme, le script prend le relais.
+
+        L'ordre importe : le thread d'installation est déjà en fin de course
+        (le script détaché attend la sortie de l'exe), la fermeture passe par
+        `closeEvent`, qui attend les threads de façon bornée.
+        """
+        if self._dialogue_maj is not None:
+            self._dialogue_maj.reset()
+            self._dialogue_maj = None
+        self.arreter()
+        self.close()
 
     def _maj_peripherique(self, config: Config | None = None) -> None:
         """Recalcule et affiche « Calcul : CUDA — … » ou « Calcul : CPU … ».
@@ -1978,6 +2202,16 @@ class FenetrePrincipale(QMainWindow):
                 thread.quit()
                 QApplication.processEvents()
                 thread.wait(20)
+        # Le thread de mise à jour (vérification OU installation) : même
+        # attente bornée. Normalement déjà fini — la fenêtre n'est fermable
+        # pendant une installation qu'APRÈS que le script d'échange est armé.
+        thread_maj = self._thread_maj
+        if thread_maj is not None:
+            fin = time.monotonic() + 15.0
+            while thread_maj.isRunning() and time.monotonic() < fin:
+                thread_maj.quit()
+                QApplication.processEvents()
+                thread_maj.wait(20)
         self._liberer_capture()
         super().closeEvent(event)
 

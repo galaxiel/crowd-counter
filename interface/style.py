@@ -104,6 +104,10 @@ QPushButton#primaire {
 }
 QPushButton#primaire:hover { background-color: #1d4ed8; border-color: #1d4ed8; }
 QPushButton#primaire:disabled { background-color: #1e3a8a; border-color: #1e3a8a; color: #8fa3d0; }
+/* Mise à jour disponible : accent vert — c'est une bonne nouvelle, pas une
+   erreur, et le bleu reste la marque du bouton principal. */
+QPushButton#maj_disponible { color: #4ade80; border-color: #2f6b46; }
+QPushButton#maj_disponible:hover { background-color: #22304a; border-color: #4ade80; }
 /* Groupes de réglages en cartes : fond détaché, coins, air intérieur. Le
    titre porte le fond de fenêtre pour couper la bordure qu'il chevauche. */
 QGroupBox {
@@ -213,6 +217,8 @@ QPushButton#primaire {
 }
 QPushButton#primaire:hover { background-color: #1d4ed8; border-color: #1d4ed8; }
 QPushButton#primaire:disabled { background-color: #a8c3f5; border-color: #a8c3f5; color: #ffffff; }
+QPushButton#maj_disponible { color: #15803d; border-color: #15803d; }
+QPushButton#maj_disponible:hover { background-color: #e7f5ec; border-color: #15803d; }
 QGroupBox {
     background-color: #ffffff; border: 1px solid #e3e7ec; border-radius: 10px;
     margin-top: 18px; padding: 14px 12px 12px;
@@ -299,6 +305,8 @@ QPushButton#primaire {
 }
 QPushButton#primaire:hover { background-color: #2563eb; border-color: #2563eb; }
 QPushButton#primaire:disabled { background-color: #1e3a8a; border-color: #1e3a8a; color: #93a6d9; }
+QPushButton#maj_disponible { color: #4ade80; border-color: #2f6b46; }
+QPushButton#maj_disponible:hover { background-color: #1a2a4a; border-color: #4ade80; }
 QGroupBox {
     background-color: #16213a; border: 1px solid #2c3a52; border-radius: 10px;
     margin-top: 18px; padding: 14px 12px 12px;

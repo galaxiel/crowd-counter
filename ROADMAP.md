@@ -206,12 +206,13 @@ uniquement si un profil honnête du temps total (part décodage / inférence /
 tracker) sur le segment de référence montre un décodage **> 25 %**. Sinon :
 ne pas commencer.
 
-## v2.7 — CANDIDATS (31/10/2026)
+## v2.8 — FOULE DENSE ET PASSAGES RAPIDES (candidats, 31/10/2026 — requalifiés v2.8 le 04/11)
 
 Deux items issus du rapport d'améliorations initial (28/10) qui n'avaient
 pas été repris dans le lot v2.6. Même règle que partout : ils ne
 s'exécutent qu'après annotation du segment de référence (v2.6 item 1) et
-décision explicite.
+décision explicite. L'opérateur les a requalifiés « v2.8 » le 04/11 en
+faveur de la mise à jour automatique (devenue v2.7).
 
 | Item | Ce qu'il améliore | Effort | État |
 |---|---|---|---|
@@ -294,7 +295,7 @@ avertissements tombent sur des franchissements humains réels (passages
 rapides bien manqués), le déclencheur est juste ; s'ils pleuvent sur des
 naissances de piste normales le long de la ligne, resserrer le déclencheur.
 
-## v2.8 — THÈME ET MISE À JOUR (décisions du 04/11/2026)
+## v2.7 — THÈME ET MISE À JOUR (décisions du 04/11/2026)
 
 Deux items issus de l'analyse « une interface moderne à la GestyLoc ? ».
 Verdict de l'analyse, écrit ici pour ne pas la refaire : le look de GestyLoc
@@ -346,28 +347,42 @@ sélecteurs partagés (champs/tooltips/scrollbars présents dans les deux
 feuilles). Suite complète : **629 verts**. Captures des deux thèmes
 présentées à l'opérateur — le commit part après validation visuelle.
 
-### 2. Mise à jour automatique — effort `S` (niveau 1) / `M` (niveau 2) — CANDIDAT DÉTAILLÉ
+### 2. Mise à jour automatique, niveau 2 — effort `M` — LIVRÉ (04/11, demande opérateur)
 
-**Ce que c'est.** Aujourd'hui une release = zip manuel de 213 Mo sur GitHub
-Releases, sans mécanisme de mise à jour (l'utilisateur re-télécharge à la
-main). Deux niveaux indépendants, le 1 ne préjuge pas du 2 :
+**Ce que c'est.** L'application, à chaque démarrage (exe gelé seulement),
+cherche la dernière release sur l'API GitHub. Plus récente ? Un bouton vert
+apparait dans la barre de boutons — pas de dialogue imposé. Au clic,
+confirmation, puis : téléchargement avec **reprise sur interruption**
+(`Range`), **vérification sha256** publiée en asset de la release,
+extraction dans un dossier d'étape `.maj-<version>` du dossier parent,
+**migration des données de l'opérateur** (`config/local_*.json`,
+`config/profils/`, les `.pt` déposés dans `modeles/` non livrés par la
+release), et un script d'échange détaché qui — après la sortie de l'app —
+**RENOMME** l'installation courante en `*.ancienne` (sauvegarde, jamais une
+suppression), met la nouvelle à sa place et la relance. La nouvelle
+version, en démarrant, efface les restes (`nettoyer_anciennes`) : un
+`*.ancienne` encore présent au démarrage suivant prouve que la nouvelle
+version N'A JAMAIS démarré, et la sauvegarde contient l'installation qui
+marchait.
 
-- **Niveau 1 — notification + lien (`S`).** Au démarrage (ou sur demande),
-  interroger l'API GitHub (`api.github.com/repos/galaxiel/crowd-counter/
-  releases/latest`), comparer le tag à `compteur.VERSION`, et proposer :
-  « nouvelle version X.Y.Z disponible → ouvrir la page de téléchargement ».
-  Un clic ouvre le navigateur (même mécanique que le bouton de soutien).
-  Pas d'installation, pas de risque de casser l'app.
-- **Niveau 2 — installation automatique (`M`).** Télécharger le zip de la
-  release puis l'installer. Le savoir-faire de reprise/messages existe
-  (`compteur/telechargement.py` : reprise d'interruption, 404, coupure, mode
-  dégradé — mêmes règles à réutiliser). Points délicats : se remplir
-  soi-même (l'app tourne depuis le dossier à remplacer → extraire à côté et
-  permuter au redémarrage, jamais en marche), et les poids de `modeles/`
-  (dossier personnel ou livré) qui doivent survivre au remplacement.
+**Garde-fous (tous bloquants).** Pas d'asset `.sha256` dans la release →
+repli niveau 1 (bouton qui ouvre la page). Archive sans le bon sha →
+effacée, rien d'installé. Espace disque insuffisant → refus avant de
+télécharger. Archive suspecte (zip-slip) → refusée. Hors exe gelé
+(développement, tests) → module muet, jamais de réseau. Un serveur qui
+ignore la reprise `Range` → redémarrage du téléchargement à zéro au lieu
+d'un fichier corrompu.
 
-**Comment trancher.** Le niveau 1 peut partir avec le prochain lot sans
-condition. Le niveau 2 ne se lance qu'après un test complet du remplacement
-sur une installation réelle : un updater qui rate peut rendre l'app non
-démarrable, c'est le seul item de cette roadmap avec ce niveau de risque.
-Décision opérateur attendue (04/11 : « mettre ça dans la roadmap » — fait).
+**Implémentation.** `compteur/mise_a_jour.py` (moteur, sans Qt — 21 tests
+`tests/test_mise_a_jour.py`, réseau injecté, zips réels dans tmp) ;
+`interface/app.py` : `_VerificationMaj` / `_InstallationMaj` (pattern
+worker/thread du chargement de modèle), bouton `#maj_disponible` dans les
+trois thèmes, `QProgressDialog` modal avec annulation bornée ;
+`closeEvent` attend le thread de mise à jour de façon bornée.
+
+**Reste, avant de compter dessus en conditions réelles** : un test complet
+du remplacement sur une installation réelle (PC de l'opérateur) au moment
+de la release qui la portera — c'est le seul item du projet capable de
+rendre une app non démarrable s'il rate, et le renommage-sauvegarde est
+précisément ce qui rend l'échec récupérable à la main. Les releases
+futures doivent publier l'asset `.zip.sha256` à côté du zip.

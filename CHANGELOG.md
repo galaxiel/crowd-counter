@@ -8,6 +8,19 @@ notes de release détaillées (anglais) accompagnent chaque version sur la
 Les poids `.pt` ne sont pas dans les archives : les modèles `tetes-*.pt`
 doivent être posés dans `modeles/` (voir le README).
 
+## [Non publié]
+
+### Ajouté
+
+- **Mise à jour automatique** : au démarrage, l'application vérifie la
+  dernière release publiée. Plus récente ? Un bouton vert apparait —
+  téléchargement avec reprise, vérification de l'empreinte sha256 publiée
+  en asset, remplacement de l'application et relance automatiques. Les
+  réglages, profils et modèles déposés sont conservés ; l'ancienne version
+  reste en sauvegarde jusqu'au démarrage réussi de la nouvelle. Sans
+  empreinte publiée, repli sur l'ouverture de la page de téléchargement.
+  Disponible uniquement dans l'exécutable.
+
 ## [2.5.0] — 2026-11-04
 
 ### Ajouté
