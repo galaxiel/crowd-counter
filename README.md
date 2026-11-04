@@ -170,13 +170,21 @@ start normally.
 
 | | |
 |---|---|
-| Download | **160 MB** |
+| Download | **~224 MB** |
 | Needs internet | yes, on first launch |
 | Administrator rights | no |
 | First launch | downloads PyTorch (~2.4 GB CUDA, ~200 MB CPU) |
 | Windows version | 10 or later |
 
 Download it from the [releases page](../../releases).
+
+> **Windows may show a blue warning ("Windows protected your PC") on first
+> launch.** The executable is not code-signed, so SmartScreen warns about
+> it until the download builds enough reputation. Click **More info → Run
+> anyway** — the warning does not come back afterwards. To be sure the
+> archive you downloaded is the one that was published, compare its
+> SHA-256 with the value printed in the release notes (every release ships
+> a `.zip.sha256` asset for exactly that).
 
 > The first launch needs internet. A machine that has neither an NVIDIA card nor
 > a working download path falls back to CPU (~200 MB), which works but is slow.
