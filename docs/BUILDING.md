@@ -74,6 +74,64 @@ tool covers.
 > If the folder is locked during a rebuild (`Device or resource busy`), the
 > executable from the previous build is still running. Close it first.
 
+## Publishing a release
+
+Publication happens **only on an explicit request** from the operator — the
+same rule as the build. `master` is allowed to be ahead of the last release;
+that is not an oversight to fix.
+
+This is the exact order used for v2.5.0 and v2.6.2. Do not reorder it: the
+archive is proven to start before it is zipped, and hashed before it is
+published.
+
+```bash
+# 1. prove the freshly built executable starts (see the section above)
+build-env\Scripts\python tools\verifier_lancement_exe.py
+
+# 2. zip — the archive MUST be flat: CompteurManifestation.exe, _internal/
+#    and modeles/ at the root of the zip, no wrapping folder.
+pwsh -NoProfile -Command "Compress-Archive -Path 'dist/CompteurManifestation/*' -DestinationPath 'dist/CompteurManifestationV2-vX.Y.Z-win64.zip' -Force"
+
+# 3. hash — from git-bash, INSIDE dist/, so the asset records a bare
+#    filename instead of a local path (see the trap below)
+cd dist && sha256sum CompteurManifestationV2-vX.Y.Z-win64.zip | tee CompteurManifestationV2-vX.Y.Z-win64.zip.sha256
+
+# 4. put the same value as the LAST line of the release notes
+#    **SHA-256**: <hash>
+
+# 5. publish — this also creates the tag vX.Y.Z
+gh release create vX.Y.Z \
+  CompteurManifestationV2-vX.Y.Z-win64.zip \
+  CompteurManifestationV2-vX.Y.Z-win64.zip.sha256 \
+  --notes-file release-notes-vX.Y.Z.md
+
+# 6. verify BOTH assets are actually on the page (a silent upload is not a
+#    success), and that the digest matches the notes
+gh release view vX.Y.Z --json assets --jq '.assets[] | "\(.name)\t\(.digest)"'
+```
+
+**Why the archive must be flat.** `compteur/mise_a_jour.py::extraire` extracts
+every member at its relative path *inside the application folder*. A wrapping
+`CompteurManifestation/` folder would install everything one level too deep, so
+the replace-and-relaunch step would land on a folder containing a single
+subfolder — and the next update breaks.
+
+**Why the `.zip.sha256` asset is not optional.** `lire_derniere_version` looks
+for the asset to know what to verify; without it `sha256` comes back `None` and
+the updater falls back to the degraded path (open the release page). Nothing
+fails loudly — the application simply stops checking the download against the
+published hash, while the README tells users it does. Publishing the zip alone
+is therefore a silent regression, not a smaller release.
+
+**Trap: the hash line must name the file, not a local path.** Running
+`sha256sum` from a scratch directory produces
+`<hash>  */tmp/release-v262/CompteurManifestationV2-v2.6.2-win64.zip`. The
+application only reads the first field so it still works, but the asset is then
+useless to anyone doing `sha256sum -c` on their own download. Run it from
+`dist/`, as in step 3, so the line reads
+`<hash> *CompteurManifestationV2-vX.Y.Z-win64.zip` (the `*` is coreutils'
+"binary mode" marker, expected and harmless — `sha256sum -c` accepts it).
+
 ## Performance and GPU
 
 **torch must be installed as the CUDA version.** On this machine:

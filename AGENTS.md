@@ -39,6 +39,12 @@ Avant de travailler, vérifier d'un coup :
 
 - **Ne pas construire d'exécutable sans demande explicite.** PyInstaller ne se lance que sur les mots
   « lance la reconstruction ».
+- **Ne pas publier de release sans demande explicite.** `master` peut être en avance sur la dernière
+  release : ce n'est pas un oubli à réparer.
+- **Une release publie TOUJOURS deux assets** : le zip **et** son `.zip.sha256` (l'updater le lit ;
+  sans lui il perd la vérification du téléchargement, sans aucune erreur visible). Archive **plate**,
+  hash généré depuis `dist/` pour que l'asset nomme le fichier et non un chemin local. Procédure
+  complète : `docs/BUILDING.md` §« Publishing a release ».
 - **Ne pas ajouter de fonctionnalité non demandée** (bouton, détection automatique, optimisation).
 - **Mesurer avant d'affirmer.** Un chiffre arrive toujours avec son périmètre : segment de frames,
   réglage `sens`, résolution, matériel.
