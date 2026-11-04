@@ -359,22 +359,30 @@ def migrer_donnees(ancienne: pathlib.Path, nouvelle: pathlib.Path) -> list[str]:
     return copies
 
 
-def texte_script_echange(nom_staging: str) -> str:
+def texte_script_echange() -> str:
     """Le `.bat` qui échange l'installation APRES la sortie de l'app.
 
     Généré avec des chemins RELATIFS au dossier parent (`pushd "%~dp0.."`),
     donc indifférent au nom réel du dossier d'installation (que
     l'opérateur a pu renommer) et à son emplacement (Bureau, clé USB).
-    Séquence : attendre la sortie de l'exe, RENOMMER l'ancienne
+    **Piège corrigé le 04/11 (réel)** : le chemin de la nouvelle version ne
+    doit PAS repartir du nom de l'étape (`%~dp0.maj-X`), car `%~dp0` EST
+    déjà le dossier d'étape — le doubler donne un chemin inexistant, le
+    `move` échoue en silence (`>nul`) et le repli remet l'ancienne version
+    sans jamais relancer. La forme correcte est `%~dp0CompteurManifestation`
+    : le bat vit DANS l'étape, l'application extraite est juste à côté de
+    lui. Séquence : attendre la sortie de l'exe, RENOMMER l'ancienne
     installation (sauvegarde — jamais supprimée ici), mettre la nouvelle à
     sa place, vérifier que l'exe y est, la relancer. Si un `move` échoue ou
     que l'exe manque : RETOUR ARRIÈRE immédiat, l'installation d'origine
     est intacte. Le nettoyage des dossiers `.maj-*` et `*.ancienne`
     restants appartient à la nouvelle app (`nettoyer_anciennes`), qui seul
-    sait que la nouvelle version a démarré.
+    sait que la nouvelle version a démarré. Les commentaires du bat sont
+    en ASCII pur : il est écrit en cp1252 et un accent mal décodé ne doit
+    jamais faire douter d'une ligne de commande.
     """
     return f"""@echo off
-rem Echange de l'installation — genere par CompteurManifestation.
+rem Echange de l'installation - genere par CompteurManifestation.
 rem Etapes : attendre la sortie de l'exe, renommer l'ancienne installation
 rem (sauvegarde), mettre la nouvelle a sa place, la relancer.
 setlocal
@@ -383,7 +391,7 @@ pushd "%~dp0.."
 tasklist /FI "IMAGENAME eq {EXE_NOM}" 2>nul | find /I "{EXE_NOM}" >nul && (timeout /t 1 /nobreak >nul & goto attendre)
 move /Y "CompteurManifestation" "CompteurManifestation.ancienne" >nul
 if errorlevel 1 goto echec
-move /Y "%~dp0{nom_staging}\\CompteurManifestation" "CompteurManifestation" >nul
+move /Y "%~dp0CompteurManifestation" "CompteurManifestation" >nul
 if errorlevel 1 goto retour
 if not exist "CompteurManifestation\\{EXE_NOM}" goto retour
 start "" "CompteurManifestation\\{EXE_NOM}"
@@ -422,7 +430,7 @@ def preparer_staging(
         )
     migrer_donnees(dossier_app, nouveau)
     chemin_bat = staging / "mise-a-jour.bat"
-    chemin_bat.write_text(texte_script_echange(staging.name), encoding="cp1252")
+    chemin_bat.write_text(texte_script_echange(), encoding="cp1252")
     return chemin_bat
 
 

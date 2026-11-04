@@ -314,7 +314,7 @@ def test_exe_gele_renvoie_son_dossier(monkeypatch, tmp_path):
 
 
 def test_script_echange_renomme_sans_supprimer():
-    texte = mise_a_jour.texte_script_echange(".maj-2.6.0")
+    texte = mise_a_jour.texte_script_echange()
     # La sauvegarde est un RENOMMAGE — jamais une suppression avant le
     # démarrage réussi de la nouvelle version.
     assert "move /Y \"CompteurManifestation\" \"CompteurManifestation.ancienne\"" in texte
@@ -325,3 +325,13 @@ def test_script_echange_renomme_sans_supprimer():
     sortie_heureuse = texte.index("exit /b 0")
     assert texte.index("goto retour") < sortie_heureuse
     assert texte.index("goto echec") < sortie_heureuse
+
+
+def test_script_echange_chemin_de_la_nouvelle_version_non_double():
+    """Le bug réel du 04/11 : le chemin de la nouvelle version repartait du
+    nom de l'étape ALORS QUE `%~dp0` EST déjà ce dossier — chemin doublé,
+    inexistant, `move` en échec silencieux, repli sans relance. Le bat vit
+    DANS l'étape : la bonne forme est `%~dp0CompteurManifestation`."""
+    texte = mise_a_jour.texte_script_echange()
+    assert 'move /Y "%~dp0CompteurManifestation" "CompteurManifestation"' in texte
+    assert "%~dp0.maj-" not in texte
