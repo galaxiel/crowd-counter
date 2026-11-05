@@ -19,8 +19,8 @@ sous-dossier `modeles/` apparaissent donc dans la liste, et se chargent.
 
 Cet outil copie AUSSI les profils de réglages livrés (`config/profils/*.json`
 du dépôt) dans le `config/profils/` de l'installation : une version neuve
-propose d'emblée les réglages validés sur le terrain (vue à 3 m avec
-banderoles, vue en plongée). L'updater, pendant une mise à jour, ne recopie
+propose d'emblée les réglages validés sur le terrain (vue de côté
+légèrement en hauteur, vue plongeante). L'updater, pendant une mise à jour, ne recopie
 un profil de l'ancienne installation QUE s'il n'existe pas déjà dans la
 nouvelle (`mise_a_jour.migrer_donnees`) : le profil LIVRÉ fait donc foi, et
 une variante personnelle doit être enregistrée sous un AUTRE nom pour

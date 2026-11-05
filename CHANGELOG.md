@@ -15,7 +15,7 @@ doivent être posés dans `modeles/` (voir le README).
 - **Profils de réglages livrés avec le logiciel.** `config/profils/`
   transporte désormais deux profils validés sur le terrain, copiés dans
   chaque installation par `tools/copier_modeles.py` :
-  `manif-vue-laterale-haute` (vue à 3 m, caméra basse, banderoles —
+  `manif-vue-laterale-haute` (vue de côté, caméra légèrement en hauteur —
   `tetes-medium-1280`, seuil 0,15, confirmation 1) et `manif-vue-plongeante`
   (vue en plongée, flux vertical, têtes rapides — `tetes-medium-1280`,
   seuil 0,05, confirmation 1, matching 0,15, hystérésis 1 ; mesuré à
