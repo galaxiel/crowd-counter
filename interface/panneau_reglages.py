@@ -139,14 +139,17 @@ ORIENTATION_SANS_LIGNE = ORIENTATION_VERTICALE
 #: qu'une opinion déguisée en réglage par défaut.
 AIDE: dict[str, str] = {
     "modele": (
-        "Modèle de détection (.pt).\n"
+        "Modèle de détection (.pt).\n\n"
         "Ce que ça fait : cherche des têtes — famille « tetes-… ». Les "
         "modèles « personnes-et-objets-… » détectent 80 types d'objets, dont "
         "les personnes.\n"
         "Ce que ça change : plus lent = meilleures petites têtes, donc plus "
         "de personnes, analyse plus longue.\n"
-        "Valeur conseillée : tetes-medium.pt — 29 px contre 21 pour "
-        "tetes-medium-1280.pt, 38 % de marches en plus.\n"
+        "Valeur conseillée : dépend de la prise de vue. Vue de près, "
+        "tetes-medium.pt voit des têtes plus grosses (+38 % de marches sur la "
+        "vidéo de référence) ; vue de loin ou en plongée, tetes-medium-1280.pt "
+        "écrase tout — mesuré en conditions réelles, 113 personnes contre 57. "
+        "Les deux profils livrés ont le bon.\n"
         "Où le ranger : « modeles/ » à côté du logiciel, ou « Parcourir… » "
         "pour un fichier resté ailleurs sur l'ordinateur."
     ),
@@ -154,10 +157,13 @@ AIDE: dict[str, str] = {
         "Seuil de confiance de la détection.\n\n"
         "Ce que ça fait : une tête n'est retenue que si le modèle est sûr "
         "d'elle à plus de ce seuil.\n"
-        "Ce que ça change : trop bas, tu perds les lointaines et floues ; "
-        "trop haut, il ne reste que les premiers rangs.\n"
-        "Valeur conseillée : 0,25. Au-dessus de 0,5, une foule dense vue en "
-        "plongeur ne donne presque plus rien."
+        "Ce que ça change : plus bas garde les têtes lointaines, floues ou de "
+        "trois quarts, avec du bruit en plus ; plus haut ne garde que les "
+        "têtes évidentes et rate les autres.\n"
+        "Valeur conseillée : 0,25 sur une vidéo proche et nette. Mesuré en "
+        "conditions réelles : 0,15 gagne sur la vue à 3-4 m avec banderoles, "
+        "0,05 sur la plongée — c'est la valeur des profils livrés, les têtes "
+        "y sont petites et de trois quarts."
     ),
     "taille_min_px": (
         "Taille minimale d'une détection (côté, en pixels).\n\n"
@@ -183,9 +189,8 @@ AIDE: dict[str, str] = {
         "Ce que ça fait : en mode Automatique, l'image est analysée à la "
         "résolution RÉELLE de la vidéo, jamais plus haut que 1280, et « "
         "Taille d'entrée » devient inactif.\n"
-        "Ce que ça change : rien au nombre de personnes comptées en soi, c'est "
-        "la même scène vue plus finement ; mesuré, 640 → 1280 donne +17 % de "
-        "personnes pour +5 % de temps.\n"
+        "Ce que ça change : la même scène vue plus finement — mesuré, "
+        "640 → 1280 donne +11 % de personnes pour ~+30 % de temps.\n"
         "Valeur conseillée : Automatique. Mesuré sur 3000 frames : 640 compte "
         "231 personnes en 179 s, 1280 en compte 257 en 230 s, 1920 en compte "
         "271 en 324 s — le dernier cran coûte deux fois plus cher pour deux "
@@ -198,8 +203,10 @@ AIDE: dict[str, str] = {
         "positif.\n"
         "Ce que ça change : plus haut élimine le bruit mais perd les passages "
         "très rapides ; plus bas compte plus tôt, avec plus de bruit.\n"
-        "Valeur conseillée : 3 — 0,1 s à 30 i/s, les têtes bougeant de 0,69 px "
-        "par frame. Au-delà, on perd des passages sans rien gagner."
+        "Valeur conseillée : 1 — mesuré en conditions réelles, 1 a gagné sur "
+        "toutes les vidéos du 05/11 (passages rapides), c'est la valeur des "
+        "profils livrés ; 3 reste le défaut d'origine pour une scène proche "
+        "et lente. Au-delà, on perd des passages sans rien gagner."
     ),
     "survie_max": (
         "Survie max sans détection (frames).\n\n"
@@ -219,9 +226,10 @@ AIDE: dict[str, str] = {
         "Ce que ça change : plus haut sépare deux voisins mais perd le suivi "
         "quand quelqu'un bouge ; plus bas fusionne les personnes qui se "
         "croisent.\n"
-        "Valeur conseillée : 0,3. Mesuré : les têtes se recouvrent à 0,95 "
-        "avec elles-mêmes, mais seulement à 0,32 après 15 px de déplacement — "
-        "au-delà de 0,35 le tracker perd la personne."
+        "Valeur conseillée : 0,3 — mesuré : les têtes se recouvrent à 0,95 "
+        "avec elles-mêmes, mais seulement à 0,32 après 15 px de déplacement. "
+        "Vue rapide (plongée), les têtes bougent trop d'une frame à l'autre : "
+        "0,15 a gagné en conditions réelles, c'est la valeur du profil livré."
     ),
     "epaisseur_bande": (
         "Épaisseur de la bande (px).\n\n"
@@ -251,11 +259,13 @@ AIDE: dict[str, str] = {
         "Fenêtre de lissage (frames).\n\n"
         "Ce que ça fait : la position testée est la moyenne des K dernières "
         "positions connues, ce qui filtre le bruit du détecteur.\n"
-        "Ce que ça change : augmenter lisse mais retarde le franchissement "
-        "d'une demi-fenetre, et le verrou anti-rebond lit encore la position "
-        "brute : le comptage est REJETÉ.\n"
-        "Valeur conseillée : 1, aucun lissage. Mesuré : la marche de référence "
-        "passe de 1 comptage (K=1) à 0 pour K=5, 10 et 20."
+        "Ce que ça change : augmenter lisse le bruit mais retarde le "
+        "franchissement d'une demi-fenêtre ; le verrou anti-rebond lit la "
+        "même position lissée, donc aucun comptage n'est perdu au passage "
+        "(avant l'alignement du verrou, la marche de référence passait de 1 "
+        "comptage à 0 — un test l'interdit désormais).\n"
+        "Valeur conseillée : 1, aucun lissage — le tremblement mesuré du "
+        "détecteur (0,69 px/frame) est bien plus petit qu'une tête."
     ),
     # La vitesse de présentation a été retirée avec le sélecteur (voir
     # `interface.app`) : l'analyse s'affiche à vitesse maximale, il n'y a
