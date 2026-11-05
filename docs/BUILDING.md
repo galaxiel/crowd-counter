@@ -66,6 +66,15 @@ the subfolder the application scans and the release zip ships).
 build/v2` keeps PyInstaller's intermediate `.toc` files in a workpath of their
 own — sharing it with other builds mixes stale state in.
 
+`copier_modeles.py` also copies the shipped settings profiles
+(`config/profils/*.json` from the repository) into
+`dist/CompteurManifestation/config/profils/` — the folder the settings panel
+lists. A shipped profile makes its field-validated defaults available on
+every fresh install; the updater only restores an old profile when the name
+is not already present in the new install, so a user who tweaks a shipped
+profile should save their variant under a different name to keep it across
+updates.
+
 ### Verify the build before shipping it
 
 ```bash

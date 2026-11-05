@@ -1,0 +1,17 @@
+{
+  "modele": "tetes-medium-1280.pt",
+  "seuil_confiance": 0.15,
+  "taille_min_px": 3,
+  "classes_retenues": null,
+  "taille_entree": 640,
+  "resolution_analyse": "auto",
+  "peripherique": "auto",
+  "frames_confirmation": 1,
+  "survie_max": 30,
+  "seuil_matching": 0.3,
+  "ligne": null,
+  "epaisseur_bande": 30,
+  "sens": -1,
+  "frames_hysteresis": 2,
+  "fenetre_lissage": 1
+}

@@ -8,6 +8,22 @@ notes de release détaillées (anglais) accompagnent chaque version sur la
 Les poids `.pt` ne sont pas dans les archives : les modèles `tetes-*.pt`
 doivent être posés dans `modeles/` (voir le README).
 
+## [Non publié]
+
+### Ajouté
+
+- **Profils de réglages livrés avec le logiciel.** `config/profils/`
+  transporte désormais deux profils validés sur le terrain, copiés dans
+  chaque installation par `tools/copier_modeles.py` :
+  `manif-3m-banderoles` (vue à 3 m, caméra basse, banderoles —
+  `tetes-medium-1280`, seuil 0,15, confirmation 1) et `manif-plongee`
+  (vue en plongée, flux vertical, têtes rapides — `tetes-medium-1280`,
+  seuil 0,05, confirmation 1, matching 0,15, hystérésis 1 ; mesuré à
+  l'identique du compte humain sur la vidéo de référence). La ligne se
+  trace à la main sur chaque vidéo, comme toujours. Une variante
+  personnelle d'un profil livré doit être enregistrée sous un autre nom
+  pour survivre aux mises à jour.
+
 ## [2.6.6] — 2026-11-05
 
 ### Corrigé

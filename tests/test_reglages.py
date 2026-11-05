@@ -226,8 +226,14 @@ def test_enregistrer_cree_le_dossier_manquant(application, tmp_path):
     assert (cible / "neuf.json").exists()
 
 
-def test_profil_apparait_dans_la_liste(application, tmp_path):
-    """Après enregistrement, le nom est proposé dans la liste déroulante."""
+def test_profil_apparait_dans_la_liste(application, tmp_path, monkeypatch):
+    """Après enregistrement, le nom est proposé dans la liste déroulante.
+
+    Le panneau charge au démarrage les profils LIVRÉS (`config/profils/` du
+    dépôt) : l'essai se fait sur un dossier isolé pour ne pas dépendre de ce
+    que le dépôt transporte.
+    """
+    monkeypatch.setattr("interface.panneau_reglages.DOSSIER_PROFILS", tmp_path)
     p = PanneauReglages(Config())
     p.enregistrer_profil("dense", dossier=tmp_path)
     assert p.noms_profils() == ["dense"]

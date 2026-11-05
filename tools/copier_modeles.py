@@ -17,6 +17,15 @@ ordre, que le chargement du modèle. Un double-clic sur l'exécutable donne
 pour dossier courant le dossier de l'exécutable : les poids copiés dans son
 sous-dossier `modeles/` apparaissent donc dans la liste, et se chargent.
 
+Cet outil copie AUSSI les profils de réglages livrés (`config/profils/*.json`
+du dépôt) dans le `config/profils/` de l'installation : une version neuve
+propose d'emblée les réglages validés sur le terrain (vue à 3 m avec
+banderoles, vue en plongée). L'updater, pendant une mise à jour, ne recopie
+un profil de l'ancienne installation QUE s'il n'existe pas déjà dans la
+nouvelle (`mise_a_jour.migrer_donnees`) : le profil LIVRÉ fait donc foi, et
+une variante personnelle doit être enregistrée sous un AUTRE nom pour
+survivre aux mises à jour.
+
 Usage :
 
     python tools/copier_modeles.py            # tetes-medium, tetes-nano, tetes-medium-1280
@@ -79,6 +88,17 @@ NOTE_DOSSIER = (
 
 #: Extension acceptée, alignée sur `compteur.detecteur.FORMATS_MODELES`.
 SUFFIXES = (".pt", ".onnx")
+
+#: Profils de réglages livrés, dans le dépôt. Présents ici, ils sont copiés
+#: dans `config/profils/` de l'installation par `main` (branche build par
+#: défaut seulement — comme la note `LISEZ-MOI`, on ne dépose rien dans un
+#: `--dest` explicite).
+PROFILS_DOSSIER = RACINE / "config" / "profils"
+
+
+def profils_livres(dossier: pathlib.Path = PROFILS_DOSSIER) -> list[pathlib.Path]:
+    """Profils `.json` livrés dans le dépôt, triés. Vide si aucun."""
+    return sorted(dossier.glob("*.json")) if dossier.is_dir() else []
 
 
 def modeles_trouves(dossier: pathlib.Path = RACINE) -> list[pathlib.Path]:
@@ -174,6 +194,21 @@ def main(argv: list[str] | None = None) -> int:
     if deposer_note:
         (dest / NOTE_NOM).write_text(NOTE_DOSSIER, encoding="utf-8")
         print(f"note   {NOTE_NOM}")
+        # Profils livrés : dans le `config/profils/` de l'installation (celui
+        # que `interface.panneau_reglages.DOSSIER_PROFILS` liste), PAS dans le
+        # dossier des poids. Un profil présent n'est jamais écrasé en
+        # `--propre` — même sémantique que les poids.
+        profils = profils_livres()
+        if profils:
+            pcopies, pignores = copier(
+                profils,
+                dest.parent / "config" / "profils",
+                ecraser=not args.propre,
+            )
+            for c in pcopies:
+                print(f"profil {c.name}")
+            for i in pignores:
+                print(f"profil déjà là {i.name} (inchangé)")
     print(f"\n{dest}")
     return 0
 
