@@ -49,6 +49,18 @@ Avant de travailler, vérifier d'un coup :
 - **Ne pas ajouter de fonctionnalité non demandée** (bouton, détection automatique, optimisation).
 - **Mesurer avant d'affirmer.** Un chiffre arrive toujours avec son périmètre : segment de frames,
   réglage `sens`, résolution, matériel.
+- **Mise à jour auto : un bug d'updater exige UNE installation manuelle.** Le code
+  d'updater qui tourne pendant une mise à jour est celui de la version INSTALLÉE —
+  jamais refaire tester la mise à jour depuis une version dont le code d'updater est
+  bugué (le correctif ne peut pas se livrer lui-même). Le script d'échange journalise
+  dans `%LOCALAPPDATA%\CompteurManifestation\journal-mise-a-jour.log`.
+- **Build : purger `dist/CompteurManifestation` AVANT de rebuild** (le COLLECT refuse un
+  dossier non vide) et lancer `tools/copier_modeles.py` APRÈS le build (il copie dans le
+  dist présent, même périmé). Sous Git Bash, `Compress-Archive` veut un chemin Windows :
+  `cygpath -w`.
+- **Aucun chemin d'OS en dur dans un test** (`QUrl.toLocalFile()` diffère entre
+  Windows et Linux — CI déjà rougie une fois) : fixtures `tmp_path` + comparer via
+  `pathlib.Path`.
 - Le compte de référence se fait sur le segment **frames 3600-4500** (2 min → 2 min 30).
 
 ## Tests
@@ -80,6 +92,11 @@ Avant de travailler, vérifier d'un coup :
   tests, **pomper** (`processEvents`) jusqu'à l'événement attendu.
 - `Qt.Key_Escape.toString()` renvoie **`"Esc"`** et non `"Escape"` — comparer la touche
   via la chaîne sérialisée, pas le nom littéral.
+- **Toute connexion Qt cross-thread passe par un slot d'un QObject récepteur,
+  JAMAIS une lambda nue** : une connexion sans récepteur s'exécute dans le
+  thread ÉMETTEUR — toucher un widget depuis le thread réseau gèle l'interface
+  (bug réel 04/11, « ne réponds plus » pendant une mise à jour ; test de
+  non-régression dans `tests/test_maj_ui.py`).
 - Le chargement du modèle (v2.5) tourne dans un worker : toute logique qui doit être
   SYNCHRONE et certaine (validation d'un chemin de modèle) se fait **avant** de lancer le
   thread, pas dedans.

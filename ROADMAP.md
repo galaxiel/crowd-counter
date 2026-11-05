@@ -216,8 +216,8 @@ faveur de la mise à jour automatique (devenue v2.7).
 
 | Item | Ce qu'il améliore | Effort | État |
 |---|---|---|---|
-| 1. NMS en foule dense | sous-comptage quand les têtes se chevauchent | `M` | candidat, à mesurer |
-| 2. Avertissement passant rapide | signal honnête quand un passage rapide n'est pas compté | `S` | **palier sûr seul** (décision opérateur 31/10) |
+| 1. NMS en foule dense | sous-comptage quand les têtes se chevauchent | `M` | **MESURÉ ET JETÉ (05/11, branche `essai/v2.8-nms`)** — voir le verdict plus bas |
+| 2. Avertissement passant rapide | signal honnête quand un passage rapide n'est pas compté | `S` | **LIVRÉ sur la branche `essai/v2.8-nms`** (fusion à décider) |
 
 ### 1. NMS en foule dense — effort `M`
 
@@ -248,52 +248,75 @@ celui d'ultralytics par défaut et **n'est nulle part réglable** aujourd'hui.
 Aucun compteur n'enregistre combien de boîtes le NMS jette par frame — on
 observe seulement le total final.
 
-**Les variants à essayer (dans l'ordre de coût croissant) :**
+**VERDICT MESURÉ (05/11/2026, branche `essai/v2.8-nms`) — candidat JETÉ.**
+Le diagnostic et le balayage ont été faits sur les vidéos de vérité terrain
+de l'opérateur (test57 = 57 personnes, test124 = 124 — scène à banderoles),
+avec le profil gagnant de la batterie :
 
-1. **Diagnostic d'abord** : passer le seuil IoU explicitement et **journaliser
-   combien de boîtes le NMS supprime par frame** sur un segment fourré —
-   savoir s'il jette 2 % ou 20 % des boîtes change tout (un chiffre manquant,
-   pas une opinion).
-2. **Élever le seuil IoU** (moins de suppressions) — les vraies têtes voisines
-   survivent ; risque : les doublons aussi, donc sur-comptage.
-3. **Soft-NMS** : au lieu de supprimer brutalement, *affaiblir* le score des
-   boîtes voisines — elles passent peut-être encore le seuil de confiance si
-   ce sont de vraies personnes, et tombent si c'était un bruit. Ni tout ni
-   rien.
+- **Diagnostic** : le NMS jette 76-79 % des détections brutes (41 frames
+  échantillonnées par vidéo). Grosse proportion, mais normale — l'essentiel
+  des boîtes jetées sont des doublons de la même tête ;
+- **Balayage du seuil IoU** (0,70 = défaut / 0,85 / 0,95) :
+  test57 → 54 / 52 / **60** ; test124 → 107 / 99 / **143**. Monter le seuil
+  **bascule du sous-comptage au sur-comptage** : à 0,95, des pistes
+  fantômes nées sur la ligne font comptées des personnes deux fois
+  (+19 sur test124), et le compteur de passages rapides explose en
+  conséquence (8 → 69) ;
+- **Aucune valeur ne convient aux deux scènes** : le déficit de test124
+  n'est PAS un problème de NMS — ce sont des têtes jamais détectées
+  (cachées derrière les banderoles) et des passages rapides. Le knob
+  `iou_nms` essayé sur la branche a été **retiré** ; le défaut
+  ultralytics (0,7) reste la référence.
 
-Note : le rapport initial évoquait aussi le « NMS class-agnostic » — sans
-effet ici, les modèles `tetes-*.pt` n'ont **qu'une seule classe** ; c'est le
-seuil IoU et dur/soft qui comptent.
+Ne pas rouvrir sans donnée nouvelle (par exemple un vrai couloir dense
+filmé en surplomb, qui n'a rien à voir avec ces places ouvertes).
 
-**Comment le trancher.** Exige une scène **réellement dense annotée** : le
-segment 3600-4500 n'est peut-être pas assez serré pour juger (auquel cas,
-annoter un second segment plus compact — banc fourni par l'item 1). Trois
-courses (baseline, seuil relevé, soft-NMS) comparées au comptage humain, en
-**personnes d'écart**, pas en impression. Retenir uniquement si l'écart vs
-humain dimanche sans doublons apparaître.
-
-### 2. Avertissement « passage rapide non compté » — effort `S` — **palier sûr seul**
+### 2. Avertissement « passage rapide non compté » — effort `S` — **LIVRÉ sur la branche `essai/v2.8-nms`** (fusion à décider)
 
 **Le défaut.** Une piste n'est acceptée par le tracker qu'après
-`frames_confirmation = 3` frames d'affilée (`config.py:366`), et le comptage
+`frames_confirmation` frames d'affilée (`config.py`), et le comptage
 exige de connaître le côté « avant » du franchissement (`cote_avant`). Un
 passant rapide traverse la ligne en 2-3 frames : quand sa piste est enfin
 confirmée, il a déjà franchi, le côté avant n'a jamais été enregistré →
 **rejet silencieux, personne non comptée, aucun indice pour l'opérateur**.
 
 **Décision de l'opérateur (31/10) : palier sûr uniquement.** Le moteur
-**détecte** le cas (piste confirmée au moment du franchissement, côté avant
-inconnue → rejet) et le **signale honnêtement** — un compteur dans le rapport
-et/ou un message à l'écran : *« N passages rapides possibles non comptés »*.
-Le palier ambitieux — **deviner le côté de départ à partir de la vitesse de
-la piste** pour compter quand même — est **écarté** : deviner peut inventer
-des franchissements, et un faux avertissement est bon marché quand un faux
-compte coûte cher. Ne pas rouvrir sans changement de besoin réel.
+**détecte** le cas (côté avant inconnu au franchissement → rejet) et le
+**compte à part** — jamais ajouté au total. Le palier ambitieux — **deviner
+le côté de départ à partir de la vitesse de la piste** pour compter quand
+même — est **écarté** : deviner peut inventer des franchissements, et un
+faux avertissement est bon marché quand un faux compte coûte cher.
 
-**Comment le trancher.** Tourner sur le segment annoté : si les
-avertissements tombent sur des franchissements humains réels (passages
-rapides bien manqués), le déclencheur est juste ; s'ils pleuvent sur des
-naissances de piste normales le long de la ligne, resserrer le déclencheur.
+**CE QUE LE CHIFFRE EST — ET N'EST PAS** (explication demandée par
+l'opérateur le 05/11, à relire avant toute utilisation) :
+
+- ✅ **Une borne d'incertitude par le bas, et un indicateur de fiabilité.**
+  Le vrai chiffre est quelque part entre `total` et `total + passages
+  rapides` (moins les artefacts), jamais en dessous du total. Un compteur
+  bas (1 sur test57) dit « ce total est fiable » ; un compteur élevé dit
+  « méfiance, et corrige la CAUSE » (ligne trop loin du point d'apparition,
+  confirmation trop stricte, caméra trop basse) ;
+- ❌ **PAS un correctif du total.** Ne JAMAIS l'additionner au chiffre
+  global : la case mélange de vrais passages manqués ET des **pistes
+  fantômes** (artefacts de détection nés sur la ligne qui « franchissent »
+  instantanément, sans être des personnes). Preuve mesurée : lever le seuil
+  IoU fait exploser le compteur (1 → 27 sur test57, 8 → 69 sur test124)
+  exactement quand les doublons apparaissent ;
+- La vraie lecture sur les vidéos de l'opérateur : test57 → 54 comptés +
+  1 rapide = le vrai est probablement 54-55 ; test124 → 107 + 8 = entre
+  107 et ~115 — le reste de l'écart avec le compte humain (124) est
+  derrière les banderoles, invisible pour tout le monde, et le compte
+  humain lui-même y a été difficile (déclaré par l'opérateur).
+
+**Implémentation (branche `essai/v2.8-nms`).** Moteur : `Compteur.
+passages_rapides` incrémenté UNIQUEMENT quand `cote_avant is None` (un
+contre-marcheur, `cote_avant <= 0`, est un rejet voulu et n'y figure
+jamais) ; exposé dans `Resultat.passages_rapides` ; récap : ligne ambre
+« N passage(s) rapide(s) possible(s) non compté(s) » (objet
+`#avertissement`, déjà thémé), masquée quand le compteur est à zéro.
+**Mesuré en conditions réelles** : 1 sur test57, 8 sur test124 — les
+avertissements tombent sur de vrais franchissements, le déclencheur est
+juste. 682 tests verts sur la branche.
 
 ## v2.7 — THÈME ET MISE À JOUR (décisions du 04/11/2026)
 
