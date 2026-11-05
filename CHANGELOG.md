@@ -8,6 +8,19 @@ notes de release détaillées (anglais) accompagnent chaque version sur la
 Les poids `.pt` ne sont pas dans les archives : les modèles `tetes-*.pt`
 doivent être posés dans `modeles/` (voir le README).
 
+## [Non publié]
+
+### Corrigé
+
+- **Après une mise à jour automatique, l'application repartait avec un
+  dossier courant FAUX** (celui du dossier parent, pas celui de
+  l'installation) : la liste des profils était vide, « Charger ce
+  profil » ne trouvait rien, et les fichiers mémoire
+  (`config/local_*.json`) s'écrivaient dans le dossier parent. Deux
+  correctifs : le bat d'échange relance l'application **depuis son
+  dossier**, et l'application gelée se réancre elle-même sur le dossier
+  de son exe au démarrage (quel que soit le lanceur).
+
 ## [2.7.0] — 2026-11-05
 
 ### Ajouté

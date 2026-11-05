@@ -353,3 +353,17 @@ def test_script_echange_attente_sans_pipe_ni_console():
     # L'attente précède le premier renommage : on ne touche à rien tant que
     # l'application n'a pas rendu la main.
     assert texte.index("Get-Process") < texte.index("renommage")
+
+
+def test_script_echange_relance_depuis_le_dossier_de_l_app():
+    """Bug réel du 05/11 : le bat relancait l'exe depuis le dossier PARENT
+    (`start "" "CompteurManifestation\\CompteurManifestation.exe"` après un
+    simple `pushd "%~dp0.."`). L'app, relancée avec un dossier courant faux,
+    ne trouvait plus ses dossiers relatifs : profils vides, fichiers mémoire
+    écrits dans le parent. La relance se fait depuis le dossier de l'app."""
+    texte = mise_a_jour.texte_script_echange()
+    assert 'pushd "CompteurManifestation"\nstart "" "CompteurManifestation.exe"' in texte
+    # Le start ne doit JAMAIS repartir du parent : un chemin avec
+    # sous-dossier après le pushd de relance serait un doublé inexistant.
+    start_lignes = [l for l in texte.splitlines() if l.strip().startswith("start")]
+    assert all("CompteurManifestation\\" not in l for l in start_lignes)

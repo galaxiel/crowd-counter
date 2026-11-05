@@ -417,7 +417,14 @@ move /Y "%~dp0CompteurManifestation" "CompteurManifestation" >> "%JOURNAL%" 2>&1
 if errorlevel 1 goto retour
 if not exist "CompteurManifestation\\{EXE_NOM}" goto retour
 echo [%TIME%] relance de la nouvelle version >> "%JOURNAL%"
-start "" "CompteurManifestation\\{EXE_NOM}"
+rem Relance DEPUIS le dossier de l'application : l'app lit ses dossiers
+rem relatifs (config/profils, modeles, config/local_*.json) par rapport a
+rem son dossier courant. Bug du 05/11 (profils vides apres la mise a
+rem jour) : le start laissait le dossier courant au PARENT, l'app ne
+rem trouvait plus rien - et ecrivait ses fichiers memoire dans le parent.
+pushd "CompteurManifestation"
+start "" "{EXE_NOM}"
+popd
 popd
 echo [%TIME%] echange termine >> "%JOURNAL%"
 exit /b 0

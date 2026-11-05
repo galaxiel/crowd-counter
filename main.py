@@ -26,6 +26,8 @@ fenêtre s'ouvre quand même : c'est la règle absolue de la v2.
 from __future__ import annotations
 
 import logging
+import os
+import pathlib
 import sys
 
 from PySide6.QtWidgets import QApplication
@@ -39,7 +41,28 @@ from compteur import telechargement
 log = logging.getLogger(__name__)
 
 
+def ancrer_dossier_courant() -> None:
+    """Ramène le dossier courant au dossier de l'exe (gelé seulement).
+
+    L'application lit des dossiers RELATIFS à son installation :
+    `config/profils/`, `modeles/`, `config/local_*.json`. Lancée par
+    double-clic, son dossier courant est déjà le bon ; relancée par le bat
+    d'échange de la mise à jour, il ne l'était PAS (bug du 05/11 : l'app
+    repartait du dossier PARENT — profils vides, fichiers mémoire écrits
+    dans le parent). L'app s'ancre donc elle-même : quel que soit le
+    lanceur, le dossier courant redevient celui de l'exe. Hors exe gelé
+    (dev, tests), aucune action — le dossier courant appartient à celui
+    qui lance.
+    """
+    if getattr(sys, "frozen", False):
+        dossier_exe = pathlib.Path(sys.executable).resolve().parent
+        if pathlib.Path.cwd() != dossier_exe:
+            log.info("dossier courant réancré sur l'exe : %s", dossier_exe)
+            os.chdir(dossier_exe)
+
+
 def main() -> int:
+    ancrer_dossier_courant()
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
