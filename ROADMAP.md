@@ -4,6 +4,46 @@
 les conventions de travail et l'interpréteur — ce fichier ne les répète pas,
 il les complète.
 
+## v2.10 — CANDIDATS (propositions opérateur, 05/11/2026)
+
+Règle du dépôt inchangée : un candidat ne part qu'après validation explicite.
+
+### 1. Version anglaise de l'interface — effort `L` (pas simple aujourd'hui)
+
+**L'état des lieux (vérifié dans le code).** Toutes les chaînes visibles —
+boutons, messages de statut, boîtes de dialogue, info-bulles, et surtout le
+dictionnaire `AIDE` des réglages (11 textes longs, structurés, avec des
+mesures) — sont en français **en dur** dans `interface/`. Qt n'est utilisé
+avec aucun mécanisme de traduction (`tr()`, `QTranslator`) : il n'y a pas de
+catalogue de chaînes, rien qu'à activer.
+
+**Ce que ça coûterait.** Une passe d'extraction de toutes les chaînes vers
+un catalogue (des centaines de chaînes), puis la traduction — les textes
+d'aide sont longs et portent des mesures chiffrées qu'il faut traduire sans
+les dénaturer. Effort honnête : une journée ou plus pour une couverture
+complète ; une demi-journée pour une version partielle (boutons et messages
+seulement, sans les aides) qui donnerait une interface moitié anglaise
+moitié française — déconseillé.
+
+**Quand le faire.** Quand l'interface sera stabilisée (chaque chaîne
+ajoutée ensuite devrait être traduite deux fois). Si un public anglais
+devient réel, commencer par `tr()` sur les nouveaux ajouts.
+
+### 2. Bouton « À propos » avec vérification manuelle des mises à jour — effort `S`
+
+**Ce que c'est.** Un petit dialogue « À propos » : version en cours, bouton
+**« Vérifier les mises à jour »** (qui réutilise la recherche déjà codée —
+elle tourne au démarrage mais n'est pas déclenchable à la main), et le lien
+vers la page des releases. Le bouton vert existant reste inchangé : il
+apparait quand une mise à jour EST disponible ; l'À propos répond au besoin
+inverse — « ai-je la dernière version ? » sans attendre le prochain
+démarrage.
+
+**Pourquoi c'est simple.** Toute la mécanique existe
+(`mise_a_jour.chercher_release`, worker `_VerificationMaj`, bouton vert) :
+il s'agit d'un dialogue avec un bouton qui relance le worker existant.
+Demi-heure à une heure, tests compris.
+
 ## v2.9 — L'INTERFACE AU SERVICE DU TERRAIN (05/11/2026, LIVRÉE)
 
 Lot piloté par le retour d'usage de l'opérateur sur les vidéos de la manif du
