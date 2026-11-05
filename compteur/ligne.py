@@ -523,7 +523,7 @@ class Ligne:
             cv2.fillPoly(bande, [quad - decalage], (40, 40, 40))
             sortie[y0:y1, x0:x1] = cv2.addWeighted(zone, 0.65, bande, 0.35, 0)
         cv2.polylines(sortie, [quad], True, jaune, 1, cv2.LINE_AA)
-        cv2.line(sortie, p1, p2, vert, 2, cv2.LINE_AA)
+        cv2.line(sortie, p1, p2, vert, 3, cv2.LINE_AA)
 
         # Flèche de sens, au milieu du segment. Elle montre le sens
         # RÉELLEMENT compté, donc `sens_traversee` (= -_n) et non `_n` :
@@ -532,9 +532,11 @@ class Ligne:
         sx, sy = self.sens_traversee
         mx = (self.p1[0] + self.p2[0]) / 2.0
         my = (self.p1[1] + self.p2[1]) / 2.0
-        pointe = (int(mx + sx * demi * 1.6), int(my + sy * demi * 1.6))
+        # Demande opérateur (05/11) : la flèche était trop petite pour se
+        # lire à trois mètres de l'écran — longueur et épaisseur DOUBLÉES.
+        pointe = (int(mx + sx * demi * 3.2), int(my + sy * demi * 3.2))
         base = (int(mx), int(my))
-        cv2.arrowedLine(sortie, base, pointe, vert, 3, cv2.LINE_AA, tipLength=0.4)
+        cv2.arrowedLine(sortie, base, pointe, vert, 6, cv2.LINE_AA, tipLength=0.4)
         return sortie
 
 

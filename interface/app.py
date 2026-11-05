@@ -2368,8 +2368,8 @@ def _marquer_point(img, point: tuple[int, int]):
         (int(x), int(y)),
         (60, 200, 255),
         cv2.MARKER_CROSS,
-        markerSize=30,
-        thickness=2,
+        markerSize=60,
+        thickness=4,
     )
     return sortie
 
