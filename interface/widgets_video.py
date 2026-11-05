@@ -43,6 +43,17 @@ from PySide6.QtWidgets import QLabel, QSizePolicy
 # de style réintroduit une bordure plus tard.
 MARGIN_HORS = "#0b0c0e"
 
+#: Texte d'accueil de la zone vidéo, porté tant qu'aucune image n'est
+#: affichée (demande opérateur du 05/11 : le grand rectangle noir n'indiquait
+#: rien). Il nomme les DEUX gestes possibles — c'est aussi la seule
+#: publicité du glisser-déposer, qu'aucun bouton ne montre.
+TEXTE_ATTENTE = "Glisse une vidéo ici\nou clique sur « Charger la vidéo »"
+
+#: Gris du texte d'accueil sur le fond `MARGIN_HORS` (contraste ~7:1).
+#: Fixe, pas thémé : la zone vidéo est sombre dans TOUS les thèmes (c'est le
+#: fond du cadre vidéo, pas celui de la fenêtre).
+COULEUR_ATTENTE = "#9ca3af"
+
 
 class WidgetVideo(QLabel):
     """Affiche une image numpy et remonte les clics en coordonnées pixel.
@@ -70,7 +81,13 @@ class WidgetVideo(QLabel):
         # cohérent avec notre calcul — mais on préfère que l'offset soit
         # explicite et testable plutôt que délégué à Qt.
         self.setAlignment(Qt.AlignCenter)
-        self.setStyleSheet(f"background-color: {MARGIN_HORS};")
+        # `color`/`font-size` ne servent qu'au texte d'accueil (voir
+        # `TEXTE_ATTENTE`) ; le pixmap, lui, ignore le style. Même alignement
+        # centré pour les deux états, donc même cadrage.
+        self.setStyleSheet(
+            f"background-color: {MARGIN_HORS}; color: {COULEUR_ATTENTE}; "
+            "font-size: 18px;"
+        )
         self._image: np.ndarray | None = None
         self._pixmap: QPixmap = QPixmap()
         self._facteur = 1.0
@@ -88,6 +105,10 @@ class WidgetVideo(QLabel):
         #: None — pas de ligne, ou analyse lancée — le clic reste un tracé.
         self._zone_deplacement: tuple[int, int, int, int] | None = None
 
+        # Dès la construction : au premier lancement, la zone vidéo explique
+        # quoi faire au lieu d'un rectangle noir muet.
+        self.setText(TEXTE_ATTENTE)
+
     # -- API publique ----------------------------------------------------
 
     def definir_zone_deplacement(
@@ -103,23 +124,34 @@ class WidgetVideo(QLabel):
         self._zone_deplacement = rect
 
     def definir_image(self, img: np.ndarray | None) -> None:
-        """Affiche ``img`` (BGR ou gris), ou efface l'affichage si ``None``."""
+        """Affiche ``img`` (BGR ou gris), ou efface l'affichage si ``None``.
+
+        Sans image, le widget porte le TEXTE D'ACCUEIL (`TEXTE_ATTENTE`) :
+        au premier lancement, la zone vidéo explique quoi faire au lieu
+        d'être un rectangle noir muet (demande opérateur du 05/11).
+        """
         if img is None:
             self._image = None
             self._pixmap = QPixmap()
             self._zone_connue = QRect()
             self.clear()
+            self.setText(TEXTE_ATTENTE)
             return
 
         # L'image pleine résolution reste la source de vérité (conversion des
         # clics, reconstruction au redimensionnement). Le pixmap, lui, est
         # produit à la TAILLE D'AFFICHAGE : convertir, copier puis rétrécir
-        # 2 Mo de pixels par frame pour jeter 80 % du résultat était le poste
-        # le plus lourd de l'affichage. Le redimensionnement numpy
+        # 2 Mo de pixels par frame pour jeter 80 % du résultat était le
+        # poste le plus lourd de l'affichage. Le redimensionnement numpy
         # (INTER_AREA) est plus rapide que `scaled(SmoothTransformation)` de
         # Qt et s'applique AVANT les conversions, qui ne portent alors que sur
         # l'image réduite.
         self._image = img
+        # Le texte d'accueil cède la place au pixmap. `setText("")` AVANT
+        # `setPixmap` : un QLabel qui porte à la fois un texte et un pixmap a
+        # un rendu qui dépend de la version de Qt — on ne le laisse jamais
+        # dans cet état, quel que soit l'ordre que Qt privilégie.
+        self.setText("")
         self._peindre()
         self.image_changee.emit(img)
 

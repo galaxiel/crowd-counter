@@ -30,7 +30,7 @@ pytest.importorskip("PySide6")
 from PySide6.QtCore import QEvent, QPointF, Qt  # noqa: E402
 from PySide6.QtGui import QMouseEvent  # noqa: E402
 
-from interface.widgets_video import WidgetVideo  # noqa: E402
+from interface.widgets_video import TEXTE_ATTENTE, WidgetVideo  # noqa: E402
 
 
 @pytest.fixture(scope="module")
@@ -388,3 +388,38 @@ def test_widget_vierge_ne_leve_pas(application):
     w = creer(320, 240)
     assert w.facteur_echelle() > 0
     assert cliquer(w, 10, 10) == []
+
+
+# -- Texte d'accueil de la zone vidéo ------------------------------------
+
+
+def test_le_texte_d_accueil_est_visible_des_la_construction(application):
+    """Au premier lancement, la zone vidéo explique quoi faire au lieu d'un
+    rectangle noir muet (demande opérateur du 05/11)."""
+    w = creer(320, 240)
+    assert w.text() == TEXTE_ATTENTE
+    assert w.pixmap().isNull()
+
+
+def test_le_texte_d_accueil_nomme_les_deux_gestes():
+    """Le clic ET le glisser-déposer : le dépôt n'a aucun bouton, ce texte
+    est sa seule publicité sur l'écran d'accueil."""
+    assert "Glisse" in TEXTE_ATTENTE
+    assert "Charger la vidéo" in TEXTE_ATTENTE
+
+
+def test_la_premiere_image_efface_le_texte_d_accueil(application):
+    """Un QLabel qui porte à la fois un texte et un pixmap a un rendu qui
+    dépend de Qt : on veut l'un OU l'autre, jamais les deux."""
+    w = creer(8, 8)
+    w.definir_image(np.zeros((8, 8, 3), dtype=np.uint8))
+    assert w.text() == ""
+    assert not w.pixmap().isNull()
+
+
+def test_effacer_l_image_reaffiche_le_texte_d_accueil(application):
+    w = creer(8, 8)
+    w.definir_image(np.zeros((8, 8, 3), dtype=np.uint8))
+    w.definir_image(None)
+    assert w.text() == TEXTE_ATTENTE
+    assert w.pixmap().isNull()

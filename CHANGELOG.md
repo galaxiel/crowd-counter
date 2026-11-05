@@ -8,6 +8,14 @@ notes de release détaillées (anglais) accompagnent chaque version sur la
 Les poids `.pt` ne sont pas dans les archives : les modèles `tetes-*.pt`
 doivent être posés dans `modeles/` (voir le README).
 
+## [Non publié]
+
+### Ajouté
+
+- **Texte d'accueil dans la zone vidéo** : tant qu'aucune vidéo n'est
+  chargée, le grand cadre noir indique les deux façons de charger une vidéo
+  (glisser-déposer, ou bouton *Charger la vidéo*) au lieu de rester muet.
+
 ## [2.6.4] — 2026-11-05
 
 ### Ajouté
