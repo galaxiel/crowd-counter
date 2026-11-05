@@ -360,10 +360,16 @@ def test_l_explication_de_resolution_chiffre_son_plafond(application):
     assert "Automatique" in conseil
 
 
-def test_l_explication_ne_promet_pas_de_changer_le_decompte(application):
-    """« Automatique » ne doit pas laisser croire qu'il invente des personnes."""
+def test_l_explication_dit_ce_que_automatique_fait(application):
+    """« Automatique » choisit la taille d'analyse, il n'invente rien.
+
+    Historique : cette aide prétendait que la résolution « ne change rien au
+    nombre de personnes comptées » — c'est FAUX, mesuré (+11 % de 640 à
+    1280). Le mensonge rassurant a été remplacé par les chiffres.
+    """
     aide = AIDE["resolution_analyse"]
-    assert "rien au nombre de personnes comptées" in aide.lower()
+    assert "Automatique" in aide
+    assert "640 → 1280 donne +11 % de personnes" in aide
 
 
 # -- Fenêtre : la vidéo chargée décide -----------------------------------

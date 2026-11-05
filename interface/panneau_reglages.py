@@ -149,9 +149,8 @@ AIDE: dict[str, str] = {
         "tetes-medium.pt voit des têtes plus grosses (+38 % de marches sur la "
         "vidéo de référence) ; vue de loin ou en plongée, tetes-medium-1280.pt "
         "écrase tout — mesuré en conditions réelles, 113 personnes contre 57. "
-        "Les deux profils livrés ont le bon.\n"
-        "Où le ranger : « modeles/ » à côté du logiciel, ou « Parcourir… » "
-        "pour un fichier resté ailleurs sur l'ordinateur."
+        "Les deux profils livrés ont le bon ; à ranger dans « modeles/ » ou "
+        "via « Parcourir… »."
     ),
     "seuil_confiance": (
         "Seuil de confiance de la détection.\n\n"
