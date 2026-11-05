@@ -1995,6 +1995,11 @@ class FenetrePrincipale(QMainWindow):
             f"{self.config.frames_confirmation} f · Analyse : "
             f"{self.config.taille_entree} px"
         )
+        if resultat.passages_rapides > 0:
+            self.recap.definir_avertissement(
+                f"{resultat.passages_rapides} passage(s) rapide(s) possible(s) "
+                "non compté(s) — trop brefs pour être confirmés avant la ligne"
+            )
         self.recap.afficher(resultat)
         self.recap.setVisible(True)
 

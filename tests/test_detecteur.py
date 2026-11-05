@@ -88,6 +88,19 @@ def test_seuil_passe_au_modele():
     assert f.appels[0]["conf"] == 0.42
 
 
+def test_seuil_iou_du_nms_passe_au_modele():
+    """Le seuil IoU du NMS (v2.8) est transmis au modèle, et par défaut vaut
+    le défaut ultralytics (0.7) : la branche d'essai ne change RIEN tant que
+    l'opérateur ne l'a pas demandé."""
+    f = FauxYOLO([])
+    Detecteur(f, Config()).detecter(image())
+    assert f.appels[0]["iou"] == pytest.approx(0.7)
+
+    f2 = FauxYOLO([])
+    Detecteur(f2, Config(iou_nms=0.9)).detecter(image())
+    assert f2.appels[0]["iou"] == pytest.approx(0.9)
+
+
 def test_filtre_par_taille_minimale():
     """5x5 sous le minimum de 30 px, 100x100 le dépasse."""
     petit = (0, 0, 5, 5, 0.9, 0)

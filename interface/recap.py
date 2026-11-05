@@ -307,6 +307,17 @@ class PanneauRecap(QWidget):
         self.reglages.setWordWrap(True)
         racine.addWidget(self.reglages)
 
+        # Avertissement « passages rapides possibles non comptés » (v2.8,
+        # palier sûr) : le moteur ne les compte PAS (deviner inventerait des
+        # comptes) mais il les COMPTE — l'écran a le devoir de les annoncer.
+        # Ambre (#avertissement, déjà thémé) : un conseil honnête, pas une
+        # erreur rouge.
+        self.avertissement = QLabel("")
+        self.avertissement.setObjectName("avertissement")
+        self.avertissement.setWordWrap(True)
+        self.avertissement.setVisible(False)
+        racine.addWidget(self.avertissement)
+
         self.courbe = CourbeDebit()
         racine.addWidget(self.courbe, stretch=1)
 
@@ -348,6 +359,17 @@ class PanneauRecap(QWidget):
         self.reglages.setText(texte)
         self.reglages.setVisible(bool(texte))
 
+    def definir_avertissement(self, texte: str) -> None:
+        """Annonce honnêtement des passages possiblement non comptés (v2.8).
+
+        Un texte vide masque la ligne : une absence de passages rapides ne
+        doit pas réserver de la place à un avertissement absent — la place
+        vide au-dessus du compteur ferait croire qu'il manque quelque chose,
+        exactement le défaut que le masquage du récapitulatif corrige déjà.
+        """
+        self.avertissement.setText(texte)
+        self.avertissement.setVisible(bool(texte))
+
     def _texte_pic(self, resultat: Resultat, pic: int, fenetre: float) -> str:
         """« 147 pers/min à 1 min 12 s », ou un compte si la fenêtre est courte."""
         if pic <= 0:
@@ -371,4 +393,6 @@ class PanneauRecap(QWidget):
             valeur.setText("—")
         self.reglages.setText("")
         self.reglages.setVisible(False)
+        self.avertissement.setText("")
+        self.avertissement.setVisible(False)
         self.courbe.definir_points([])

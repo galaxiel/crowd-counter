@@ -52,6 +52,10 @@ class Compteur:
         self.total = 0
         self.presents = 0
         self.presents_max = 0
+        # Identités ayant franchi SANS jamais avoir été vues hors de la bande
+        # côté départ (passages trop rapides pour être confirmés) : rejetées
+        # du total, mais COMPÉTÉES ici pour l'avertissement honnête (v2.8).
+        self.passages_rapides = 0
         # Liste mutée en place, jamais réassignée : l'IHM (tâche 11) en garde
         # une référence pour son panneau d'audit.
         self.evenements: list[Evenement] = []
@@ -97,6 +101,7 @@ class Compteur:
         self.total = 0
         self.presents = 0
         self.presents_max = 0
+        self.passages_rapides = 0
         self.evenements.clear()
         self._derniers_centers.clear()
         self._historiques.clear()
@@ -353,6 +358,15 @@ class Compteur:
             # franchissement, là où un compteur de frames consécutives plafonne
             # à 1 et rend tout seuil > 1 inatteignable.
             if cote_avant is None or cote_avant <= 0:
+                if cote_avant is None:
+                    # Côté de départ JAMAIS vu (hors bande) : l'identité a
+                    # franchi trop vite pour être confirmée avant de croiser.
+                    # Rejetée du total (deviner inventerait des comptes) mais
+                    # comptée ici : l'opérateur mérite de savoir combien de
+                    # passages ont pu lui échapper ainsi (v2.8, palier sûr).
+                    # Un contre-marcheur, lui, a cote_avant <= 0 : rejet
+                    # voulu, jamais compté ici.
+                    self.passages_rapides += 1
                 continue
             if stabilite < ligne.hysteresis:
                 continue
@@ -434,6 +448,7 @@ class Compteur:
             nb_frames=nb_frames,
             presents_max=self.presents_max,
             presents_moyen=presents_moyen,
+            passages_rapides=self.passages_rapides,
             secondes=secondes,
             duree_video_s=duree_video_s,
             duree_vie_track_moy=duree_vie_moy,

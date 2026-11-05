@@ -333,6 +333,14 @@ class Config:
     # tetes-medium-1280.pt, soit 38 % de marches réelles en plus.
     modele: str = "tetes-medium.pt"
     seuil_confiance: float = 0.25
+    # Seuil IoU du NMS (*Non-Maximum Suppression*) passé au modèle. 0,7 =
+    # défaut ultralytics, inchangé depuis toujours ici. En foule serrée, le
+    # NMS peut supprimer la boîte d'une VRAIE personne voisine d'une autre —
+    # biais toujours vers le sous-comptage. Monter le seuil garde plus de
+    # boîtes voisines (gagne des personnes serrées, risque des doublons) ;
+    # mesuré sur test57/test124, branche essai/v2.8-nms — ne rien changer
+    # sans ces mesures.
+    iou_nms: float = 0.7
     # Une tête détectée sur cette vidéo fait 20-29 px : un seuil de 20 px
     # filtrerait la moitié des détections. 3 px ne filtre que le bruit.
     taille_min_px: int = 3

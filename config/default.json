@@ -1,6 +1,7 @@
 {
   "modele": "tetes-medium.pt",
   "seuil_confiance": 0.25,
+  "iou_nms": 0.7,
   "taille_min_px": 3,
   "classes_retenues": null,
   "taille_entree": 640,

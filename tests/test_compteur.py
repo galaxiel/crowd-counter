@@ -522,3 +522,51 @@ def test_le_faux_tracker_bien_joue_le_scenario():
 def test_une_detection_bien_construite():
     d = Detection(x1=0.0, y1=0.0, x2=10.0, y2=10.0, score=0.9, class_id=0)
     assert d.center == (5.0, 5.0)
+
+
+# --- passages rapides (v2.8, branche d'essai) -----------------------------
+
+
+def test_passage_rapide_rejete_du_total_mais_compte_comme_tel():
+    """Apparaître SUR la ligne sans jamais avoir été vu hors de la bande
+    côté départ, puis franchir : rejeté du total (palier sûr — deviner
+    inventerait des comptes) mais compté dans `passages_rapides` pour
+    l'avertissement honnête (v2.8).
+
+    x=322 est DANS la zone morte (±15 px, épaisseur 30) : aucun côté n'est
+    mémorisé à cette frame. Le franchissement vers la gauche (sens=-1)
+    trouve alors `cote_avant is None`.
+    """
+    c = jouer(compteur(marche(1, [322.0, 250.0]), sens=-1), 2)
+    assert c.total == 0
+    assert c.passages_rapides == 1
+
+
+def test_une_marche_normale_ne_declenche_pas_l_avertissement():
+    """Vue du bon côté AVANT le franchissement (x=400, hors zone morte) :
+    comptée normalement, et `passages_rapides` reste à zéro — l'avertissement
+    ne doit pas pleurer sur des naissances de piste normales, sinon
+    l'opérateur apprendrait à l'ignorer."""
+    c = jouer(
+        compteur(marche(1, [400.0, 250.0]), sens=-1, frames_hysteresis=1), 2
+    )
+    assert c.total == 1
+    assert c.passages_rapides == 0
+
+
+def test_contre_marcheur_ni_compte_ni_averti():
+    """Un contre-marcheur a un côté de départ CONNU (cote_avant <= 0) :
+    rejet voulu, jamais signalé comme « passage rapide » — sinon le
+    compteur annoncerait des pertes qui n'en sont pas."""
+    c = jouer(
+        compteur(marche(1, [250.0, 400.0]), sens=-1, frames_hysteresis=1), 2
+    )
+    assert c.total == 0
+    assert c.passages_rapides == 0
+
+
+def test_reinitialiser_riadube_le_compteur_de_passages_rapides():
+    c = jouer(compteur(marche(1, [322.0, 250.0]), sens=-1), 2)
+    assert c.passages_rapides == 1
+    c.reinitialiser()
+    assert c.passages_rapides == 0

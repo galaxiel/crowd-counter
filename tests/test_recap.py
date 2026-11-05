@@ -126,3 +126,24 @@ def test_points_de_debit_garde_les_minutes_vides(application):
     # Durée nulle : aucune tranche, aucune courbe — et surtout pas de division
     # par zéro.
     assert points_de_debit(Resultat(total=0, evenements=[], duree_video_s=0.0)) == []
+
+def test_avertissement_passages_rapides_masque_par_defaut(application):
+    """Pas de passages rapides = pas de place réservée à un avertissement
+    absent — le défaut exact que le masquage du récapitulatif corrige déjà."""
+    panneau = PanneauRecap()
+    assert panneau.avertissement.isHidden()
+
+
+def test_avertissement_passages_rapides_affiche_puis_masque(application):
+    """Le moteur REJETTE les passages rapides du total mais les COMPTE :
+    l'écran a le devoir de les annoncer (v2.8, palier sûr)."""
+    panneau = PanneauRecap()
+    panneau.definir_avertissement("3 passage(s) rapide(s) possible(s) non compté(s)")
+    assert not panneau.avertissement.isHidden()
+    assert "3" in panneau.avertissement.text()
+
+    panneau.effacer()
+    assert panneau.avertissement.isHidden()
+
+    panneau.definir_avertissement("")
+    assert panneau.avertissement.isHidden()

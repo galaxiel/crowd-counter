@@ -109,4 +109,8 @@ class Resultat:
     # utilisateur puisse juger lui-même si le décompte tient.
     duree_vie_track_moy: float = 0.0
     nb_tracks_vus: int = 0
+    # Identités passées trop vite pour être confirmées avant le
+    # franchissement : rejetées du total (palier sûr — deviner inventerait
+    # des comptes), mais comptées ici pour l'avertissement honnête (v2.8).
+    passages_rapides: int = 0
     detections_par_frame: float = 0.0
