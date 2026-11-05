@@ -29,7 +29,7 @@ moitié française — déconseillé.
 ajoutée ensuite devrait être traduite deux fois). Si un public anglais
 devient réel, commencer par `tr()` sur les nouveaux ajouts.
 
-### 2. Bouton « À propos » avec vérification manuelle des mises à jour — effort `S`
+### 2. Bouton « À propos » avec vérification manuelle des mises à jour — effort `S` — LIVRÉ (05/11/2026, même jour)
 
 **Ce que c'est.** Un petit dialogue « À propos » : version en cours, bouton
 **« Vérifier les mises à jour »** (qui réutilise la recherche déjà codée —

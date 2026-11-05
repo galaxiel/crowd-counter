@@ -42,6 +42,7 @@ from PySide6.QtGui import QDesktopServices, QIcon, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QApplication,
     QComboBox,
+    QDialog,
     QFileDialog,
     QHBoxLayout,
     QLabel,
@@ -716,6 +717,17 @@ class FenetrePrincipale(QMainWindow):
         etiquette_theme.setObjectName("libelle_reglage")
         barre.addWidget(etiquette_theme)
         barre.addWidget(self.choix_theme)
+        # « À propos » : version, vérification MANUELLE de mise à jour
+        # (le bouton vert, lui, n'apparaît que QUAND une mise à jour
+        # existe) et lien vers les versions. Demande opérateur du
+        # 05/11/2026 — candidat v2.10 item 2, validé à l'oral.
+        self.btn_a_propos = QPushButton("À propos")
+        self.btn_a_propos.setToolTip(
+            "Version du logiciel, vérification manuelle de mise à jour, "
+            "page des versions."
+        )
+        self.btn_a_propos.clicked.connect(self._ouvrir_a_propos)
+        barre.addWidget(self.btn_a_propos)
         self._barre_boutons = barre
         colonne.addLayout(barre)
 
@@ -828,24 +840,47 @@ class FenetrePrincipale(QMainWindow):
 
     # -- Mise à jour ------------------------------------------------------
 
-    def _verifier_mise_a_jour(self) -> None:
+    def _verifier_mise_a_jour(self, retour=None) -> bool:
         """Cherche une mise à jour en tâche de fond — EXÉCUTABLE GELÉ SEULEMENT.
 
         En développement (`python main.py`) il n'y a rien à mettre à jour,
         et les tests ne doivent pas toucher le réseau : le garde `frozen`
         rend toute la fonction silencieuse hors exe. La vérification part
         une fois, au démarrage ; un échec n'est signalé nulle part.
+
+        `retour` (un QLabel) sert à la vérification MANUELLE du dialogue
+        « À propos » : le résultat y est annoncé, au-delà du bouton vert.
+        Le thread est le MÊME que celui du démarrage (`self._thread_maj`) :
+        le `closeEvent` l'attend de façon bornée, vérification manuelle
+        comprise.
         """
         dossier = mise_a_jour.dossier_application()
         if dossier is None:
-            return
+            if retour is not None:
+                retour.setText(
+                    "Vérification possible dans l'application installée "
+                    "seulement."
+                )
+            return False
+        if self._thread_maj is not None and self._thread_maj.isRunning():
+            if retour is not None:
+                retour.setText("Une vérification est déjà en cours…")
+            return False
         self._thread_maj = QThread()
         self._worker_maj = _VerificationMaj(VERSION, dossier)
         self._worker_maj.moveToThread(self._thread_maj)
         self._thread_maj.started.connect(self._worker_maj.run)
         self._worker_maj.fini.connect(self._maj_trouvee)
         self._worker_maj.fini.connect(self._thread_maj.quit)
+        self._retour_verification = retour
+        if retour is not None:
+            # Slot de CET objet (récepteur) : le résultat du worker,
+            # émis hors du fil IHM, arrive sur le fil de l'interface —
+            # jamais de lambda nue (leçon du 04/11).
+            self._worker_maj.fini.connect(self._annoncer_resultat_verification)
+            retour.setText("Vérification en cours…")
         self._thread_maj.start()
+        return True
 
     def _maj_trouvee(self, info) -> None:
         """Une version plus récente existe : un bouton vert le dit.
@@ -1046,6 +1081,64 @@ class FenetrePrincipale(QMainWindow):
             return
         boite = QMessageBox.critical if grave else QMessageBox.warning
         boite(self, titre, message)
+
+    def _annoncer_resultat_verification(self, info) -> None:
+        """Annonce le résultat de la vérification MANUELLE dans le dialogue.
+
+        `info is None` est ambigu PAR CONCEPTION (échec réseau ou pas de
+        mise à jour) : le message le dit honnêtement au lieu de promettre.
+        Si une version existe, `_maj_trouvee` a déjà posé le bouton vert.
+        """
+        retour = self._retour_verification
+        self._retour_verification = None
+        if retour is None:
+            return
+        if info is None:
+            retour.setText(
+                "Aucune nouvelle version trouvée — tu es à jour (ou le "
+                "réseau était injoignable : réessaie plus tard)."
+            )
+        else:
+            retour.setText(
+                f"Nouvelle version {info.get('version', '?')} disponible "
+                "— le bouton vert de la barre l'installe."
+            )
+
+    def _construire_a_propos(self) -> QDialog:
+        """Le dialogue « À propos » : version, vérification, lien.
+
+        Construit ici, montré par `_ouvrir_a_propos` — la construction est
+        séparable pour être testable sans boucle d'événements.
+        """
+        dialogue = QDialog(self)
+        dialogue.setWindowTitle("À propos — Compteur de manifestation")
+        v = QVBoxLayout(dialogue)
+        titre = QLabel("<b>Compteur de manifestation</b>")
+        v.addWidget(titre)
+        v.addWidget(QLabel(f"Version {VERSION}"))
+        retour = QLabel("")
+        retour.setWordWrap(True)
+        v.addWidget(retour)
+        self._btn_verifier_maj = QPushButton("Vérifier les mises à jour")
+        self._btn_verifier_maj.clicked.connect(
+            self._demander_verification
+        )
+        v.addWidget(self._btn_verifier_maj)
+        lien = QLabel(
+            '<a href="https://github.com/galaxiel/crowd-counter/releases">'
+            "Toutes les versions (GitHub)</a>"
+        )
+        lien.setOpenExternalLinks(True)
+        v.addWidget(lien)
+        self._retour_a_propos = retour
+        return dialogue
+
+    def _demander_verification(self) -> None:
+        self._verifier_mise_a_jour(retour=self._retour_a_propos)
+
+    def _ouvrir_a_propos(self) -> None:
+        """Montre le dialogue « À propos » (modale, un seul geste utile)."""
+        self._construire_a_propos().exec()
 
     def _on_soutenir(self) -> None:
         """Ouvre la page de don dans le navigateur par défaut.

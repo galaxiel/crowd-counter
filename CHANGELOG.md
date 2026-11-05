@@ -41,6 +41,17 @@ doivent être posés dans `modeles/` (voir le README).
   ou de la verticale se colle exactement droite (recalage du second point).
   Un tracé franchement diagonal n'est pas déplacé.
 
+## [Non publié]
+
+### Ajouté
+
+- **Dialogue « À propos »** (bouton en bout de barre) : version du
+  logiciel, bouton **« Vérifier les mises à jour »** — la même recherche
+  que celle du démarrage, déclenchable à la main, résultat annoncé dans
+  le dialogue — et lien vers la page des versions. Le bouton vert reste
+  le geste d'installation : il n'apparaît que quand une mise à jour
+  existe.
+
 ## [2.9.0] — 2026-11-05
 
 ### Ajouté
