@@ -41,11 +41,11 @@ def test_dossier_absent_n_est_pas_une_erreur(tmp_path: pathlib.Path):
 
 
 def test_la_copie_ecrase_sauf_demande(tmp_path: pathlib.Path):
-    source = PROFILS_DOSSIER / "manif-plongee.json"
+    source = PROFILS_DOSSIER / "manif-plongee-pont.json"
     dest = tmp_path / "config" / "profils"
     copies, _ = copier([source], dest)
-    assert [c.name for c in copies] == ["manif-plongee.json"]
-    (dest / "manif-plongee.json").write_text("{}", encoding="utf-8")
+    assert [c.name for c in copies] == ["manif-plongee-pont.json"]
+    (dest / "manif-plongee-pont.json").write_text("{}", encoding="utf-8")
     copies, ignores = copier([source], dest, ecraser=False)
     assert copies == []
-    assert [i.name for i in ignores] == ["manif-plongee.json"]
+    assert [i.name for i in ignores] == ["manif-plongee-pont.json"]
