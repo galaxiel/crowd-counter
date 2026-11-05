@@ -52,6 +52,16 @@ doivent être posés dans `modeles/` (voir le README).
   le geste d'installation : il n'apparaît que quand une mise à jour
   existe.
 
+## [Non publié]
+
+### Corrigé
+
+- **La molette fait défiler les réglages, elle ne change plus les champs.**
+  Survoler un champ (nombre, liste) en descendant le panneau changeait sa
+  valeur sans le vouloir (comportement natif de Qt). Un champ ne réagit
+  désormais à la molette que s'il a le focus (clic dedans d'abord) ; sinon
+  c'est le panneau qui défile.
+
 ## [2.9.0] — 2026-11-05
 
 ### Ajouté

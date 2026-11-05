@@ -37,12 +37,21 @@ import pathlib
 import time
 
 import cv2
-from PySide6.QtCore import QObject, QThread, QTimer, QUrl, Qt, Signal
+from PySide6.QtCore import (  # noqa: F401  (QEvent/QWheelEvent : tests)
+    QEvent,
+    QObject,
+    QThread,
+    QTimer,
+    QUrl,
+    Qt,
+    Signal,
+)
 from PySide6.QtGui import QDesktopServices, QIcon, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QApplication,
     QComboBox,
     QDialog,
+    QDoubleSpinBox,
     QFileDialog,
     QHBoxLayout,
     QLabel,
@@ -52,6 +61,7 @@ from PySide6.QtWidgets import (
     QProgressDialog,
     QPushButton,
     QScrollArea,
+    QSpinBox,
     QVBoxLayout,
     QWidget,
 )
@@ -275,6 +285,32 @@ class _ChargementModele(QObject):
             self.fini.emit(charger_modele(self._modele, self._peripherique))
         except BaseException as exc:  # noqa: BLE001 — remonter l'échec est le contrat
             self.fini.emit(exc)
+
+
+class _MoletteChamps(QObject):
+    """Molette sur un champ SANS focus : le PANNEAU défile, pas le champ.
+
+    Constat opérateur (05/11/2026) : en descendant les réglages à la
+    molette, chaque champ survolé (spinbox, liste) changeait de valeur
+    au lieu de laisser défiler — un réglage faussé sans le vouloir. Le
+    comportement natif de Qt est changé ici : un champ ne réagit à la
+    molette que s'il a le FOCUS (clic dedans d'abord) ; sinon, l'événement
+    est transmis à la zone défilante, qui fait ce que l'opérateur attend.
+    """
+
+    def __init__(self, zone) -> None:
+        super().__init__(zone)
+        self._zone = zone
+
+    def eventFilter(self, obj, event) -> bool:
+        if (
+            event.type() == QEvent.Type.Wheel
+            and not obj.hasFocus()
+        ):
+            # Transmis à la zone défilante : c'est ELLE qui défile.
+            QApplication.sendEvent(self._zone.viewport(), event)
+            return True
+        return False
 
 
 class _VerificationMaj(QObject):
@@ -648,6 +684,13 @@ class FenetrePrincipale(QMainWindow):
         zone.setWidget(self.panneau)
         zone.setWidgetResizable(True)
         zone.setFrameShape(QScrollArea.Shape.NoFrame)
+        # La molette fait DÉFILER le panneau ; un champ ne change de
+        # valeur qu'avec le focus (constat opérateur, 05/11/2026).
+        self._filtre_molette = _MoletteChamps(zone)
+        # PySide6 : findChildren n'accepte pas un TUPLE de types.
+        for type_champ in (QComboBox, QSpinBox, QDoubleSpinBox):
+            for champ in self.panneau.findChildren(type_champ):
+                champ.installEventFilter(self._filtre_molette)
         colonne.addWidget(zone, stretch=1)
 
         barre = QHBoxLayout()
