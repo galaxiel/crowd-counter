@@ -62,7 +62,7 @@ doivent être posés dans `modeles/` (voir le README).
   désormais à la molette que s'il a le focus (clic dedans d'abord) ; sinon
   c'est le panneau qui défile.
 
-## [2.9.0] — 2026-11-05
+## [2.10.0] — 2026-11-05
 
 ### Ajouté
 

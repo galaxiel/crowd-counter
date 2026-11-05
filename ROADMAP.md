@@ -31,6 +31,10 @@ devient réel, commencer par `tr()` sur les nouveaux ajouts.
 
 ### 2. Bouton « À propos » avec vérification manuelle des mises à jour — effort `S` — LIVRÉ (05/11/2026, même jour)
 
+Voir aussi la proposition détaillée du moteur ONNX pour une future v3 :
+[`docs/design/v3-onnx-proposition.md`](design/v3-onnx-proposition.md) — spike
+de mesure décrit, règle de décision écrite, rien de lancé sans validation.
+
 **Ce que c'est.** Un petit dialogue « À propos » : version en cours, bouton
 **« Vérifier les mises à jour »** (qui réutilise la recherche déjà codée —
 elle tourne au démarrage mais n'est pas déclenchable à la main), et le lien
