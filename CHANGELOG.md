@@ -41,7 +41,7 @@ doivent être posés dans `modeles/` (voir le README).
   ou de la verticale se colle exactement droite (recalage du second point).
   Un tracé franchement diagonal n'est pas déplacé.
 
-## [Non publié]
+## [2.9.0] — 2026-11-05
 
 ### Ajouté
 

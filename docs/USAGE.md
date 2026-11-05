@@ -11,11 +11,16 @@ Day-to-day use of the application. To download or install it first, see the
 2. **Draw the line** — *Tracer la ligne* button, then two clicks on the image,
    at the top and bottom of the line you care about. Drawing is "armed": a
    stray click outside that gesture is ignored. The detection band follows the
-   line wherever you put it.
-3. **Set the direction** — in *Ligne de franchissement*, choose the counted
-   direction. The green arrow shows the active direction. **If the count stays
-   at zero after a few seconds, this is almost always why** — the software
-   shows a reminder rather than failing silently.
+   line wherever you put it. **Magnetic snapping**: if your second click lands
+   within 5° of the horizontal or the vertical, the line snaps exactly
+   straight — a hand-drawn line that "almost" straight would otherwise make
+   the detection zone drift away from the drawing.
+3. **Set the direction** — the *Sens : …* button in the bottom bar, one click
+   flips the counted direction; its label says exactly what is counted
+   ("Droite → gauche" on a vertical line, "Haut → bas" on a horizontal one)
+   and the green arrow follows. **If the count stays at zero after a few
+   seconds, this is almost always why** — the software shows a reminder
+   rather than failing silently.
 4. **Adjust the sensitivity** — the parameter that matters most is *Frames de
    confirmation*: 1 counts immediately (sensitive to false positives), 5 only
    validates a person seen over several consecutive frames. Every parameter has
@@ -32,6 +37,9 @@ Day-to-day use of the application. To download or install it first, see the
    a curve of people per minute, and **the settings that produced this total**
    (model, threshold, confirmation, analysis size) — so every trial stays
    traceable to its configuration.
+7. **Run it again** — the *Recommencer* button (appears after a first run)
+   rewinds the video, resets the counter and starts over — no need to reload
+   the video, and the model stays loaded, so it starts immediately.
 
 ## Settings that stick
 
@@ -41,8 +49,11 @@ Day-to-day use of the application. To download or install it first, see the
   an invisible line in the wrong place.
 - **Named profiles** save a setup you want to reuse: *Réglages → Profils*,
   type a name, *Enregistrer ce profil*; *Charger ce profil* brings it back.
-  Profiles live in `config/profils/` next to the executable and survive
-  updates. *Valeurs par défaut* restores the factory settings (the drawn line
+  Profiles live in `config/profils/` next to the executable. Two
+  field-validated profiles ship with the software (*manif-vue-laterale-haute*,
+  *manif-vue-plongeante*); a shipped profile is replaced by the one in the
+  update archive, so save a personal variant under a **different name** to
+  keep it. *Valeurs par défaut* restores the factory settings (the drawn line
   is kept).
 - These preferences live in small files next to the executable
   (`config/local_*.json`) — a per-machine preference, never part of the
@@ -50,11 +61,12 @@ Day-to-day use of the application. To download or install it first, see the
 
 ## Themes
 
-The interface comes in **four themes**: **dark** (the default), **light**,
-**navy blue**, and **follow the system** (reads the Windows theme and follows
+The interface comes in **four themes**: **navy blue** (the default), **dark**,
+**light**, and **follow the system** (reads the Windows theme and follows
 it live when it changes). Pick one from the selector at the end of the button
-bar; the choice is remembered. Dark stays the default on purpose — the counter
-is designed to be read outdoors, in full daylight.
+bar; the choice is remembered. Navy blue stays the default on purpose — it is
+a dark theme itself, and the counter is designed to be read outdoors, in full
+daylight.
 
 ## Automatic updates
 

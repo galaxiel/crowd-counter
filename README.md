@@ -333,12 +333,13 @@ defaults:
   people move less between frames than the detector's own noise, the identity
   can be lost before reaching that threshold. **Remedy: set it to 1.** That
   increases sensitivity, at the cost of false positives.
-- **Smoothing delays the crossing until it cancels it.** *Fenêtre de
+- **Smoothing delays the crossing.** *Fenêtre de
   lissage* is 1 (raw mode) by default, deliberately: the `a_traverse` test then
   reads the instantaneous position, which is the only position that "moves" at
-  this scale. Beyond K=1, smoothing delays detection of the crossing by half a
-  window while the anti-rebound lock still reads the **raw** position — already
-  past. **Remedy: leave it at 1.** Known and documented in
+  this scale. Beyond K=1, smoothing delays the crossing by half a window; the
+  anti-rebound lock reads the same smoothed position (it used to read the raw
+  one, which cancelled counts entirely — fixed and locked by a test).
+  **Remedy: leave it at 1.** Known and documented in
   `compteur/config.py`.
 
   On the reference video, a head is 20 to 29 px and moves **0.69 px per

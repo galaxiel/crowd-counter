@@ -4,6 +4,29 @@
 les conventions de travail et l'interpréteur — ce fichier ne les répète pas,
 il les complète.
 
+## v2.9 — L'INTERFACE AU SERVICE DU TERRAIN (05/11/2026, LIVRÉE)
+
+Lot piloté par le retour d'usage de l'opérateur sur les vidéos de la manif du
+05/11. 701 tests verts.
+
+| Apport | Détail |
+|---|---|
+| Bouton « Sens : … » dans la barre | Le sens de comptage s'inverse d'un clic, libellé explicite selon la ligne, flèche verte qui pivote. L'option quitte le panneau de réglages (qui ne fait plus que PORTER la valeur — les profils continuent de l'appliquer). |
+| Bouton « Recommencer » | `lancer()` rembobinait DÉJÀ la vidéo à zéro (rembobinage, compteur, récap) — l'opérateur se croyait obligé de recharger. Le bouton rend le geste explicite ; offert seulement après un premier essai. |
+| Magnétisme du tracé à 5° | Une ligne tracée à moins de 5° de l'horizontale/verticale se colle exactement droite (le réglage a été essayé à 3° puis élargi à la demande de l'opérateur). Une diagonale volontaire n'est pas déplacée. |
+| Zone de détection fidèle au dessin | Le rognage est un rectangle droit englobant : sur une ligne inclinée ses coins dépassaient de la bande réelle, et le voile restait droit. Désormais les détections hors de la bande oblique sont écartées ET le voile suit l'inclinaison. Zéro changement pour une ligne H/V (mesuré : rectangle = bande). |
+| Aides des réglages : audit complet | 6 entrées sur 11 étaient fausses ou périmées : `seuil_confiance` (logique INVERSÉE), `fenetre_lissage` (décrivait un bug corrigé), `resolution_analyse` (se contredisait ; le test qui imposait la phrase fausse réécrit), `modele`, `frames_confirmation`, `seuil_matching` (silencieuses sur les verdicts terrain). Toutes citent maintenant les mesures (profil livré = valeur conseillée quand le terrain a tranché). |
+| Épaisseur de bande : mesurée | 5 px = 37, 30 px = 32 (référence), 100 px = 24 — influence forte (zone neutre de confirmation du côté de départ). Aide réécrite d'après la mesure, pas de 5 en 5, bornes 5-100. |
+
+## v2.8.0 — LISIBLE ET FIDÈLE (05/11/2026, LIVRÉE)
+
+| Apport | Détail |
+|---|---|
+| Flèches visibles sur les listes | Le style des listes faisait disparaître la flèche native de Qt ; une image livrée (`resources/fleche-bas.png`) est posée en QSS dans les 3 thèmes. |
+| Thème marine par défaut | C'est un thème sombre lui-même — lisibilité extérieure conservée. |
+| Ligne plus lisible | Flèche de sens doublée, croix de placement doublées, trait plus épais. |
+| Profils livrés | Deux profils validés terrain copiés dans chaque installation par l'étape post-build. |
+
 Règle du dépôt : **un candidat n'est retenu qu'après mesure ou validation
 explicite**, jamais parce qu'il « a l'air bon ». Chaque item ci-dessous dit
 donc comment le trancher.
