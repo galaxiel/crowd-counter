@@ -1,4 +1,4 @@
-"""Thèmes de l'interface : sombre (défaut), clair, suivre le système.
+"""Thèmes de l'interface : bleu marine (défaut), sombre, clair, suivre le système.
 
 **Pourquoi le sombre par défaut.** L'interface est vue dehors, souvent en
 plein jour, parfois sur l'écran d'un portable posé sur un trotoir. Un thème
@@ -10,10 +10,11 @@ inversé — chiffres clairs sur fond sombre — le contraste reste lisible quel
 que soit la lumière ambiante.
 
 **Depuis le 04/11/2026, les trois modes coexistent** (demande de l'opérateur)
-: sombre, clair, et « suivre le système » (le thème Windows). Le défaut reste
-`sombre` — la raison de lisibilité ci-dessus n'a pas changé, et un défaut
-« système » ferait passer silencieusement les utilisateurs existants en clair
-au premier lancement.
+: sombre, clair, bleu marine, et « suivre le système » (le thème Windows).
+Le défaut est `marine` (demande de l'opérateur, 05/11/2026) — c'est un thème
+sombre lui aussi (fond bleu nuit), donc la raison de lisibilité ci-dessus
+reste entière ; un défaut « système » ferait passer silencieusement les
+utilisateurs existants en clair au premier lancement, il reste écarté.
 
 **Passe graphique du 04/11 (même mise en page, aucun changement de layout ni
 de géométrie de clic).** Trois décisions, appliquées aux deux thèmes :
@@ -54,6 +55,8 @@ import json
 import logging
 import pathlib
 
+from interface.ressources import chemin_ressource
+
 log = logging.getLogger(__name__)
 
 #: Modes de thème acceptés. Un identifiant SANS ACCENT : c'est lui qui voyage
@@ -63,7 +66,7 @@ log = logging.getLogger(__name__)
 MODES: tuple[str, ...] = ("sombre", "clair", "marine", "systeme")
 
 #: Mode appliqué quand rien n'est encore choisi (voir la raison de l'en-tête).
-MODE_DEFAUT = "sombre"
+MODE_DEFAUT = "marine"
 
 #: Choix proposés dans la barre de boutons, `(libellé affiché, mode stocké)`.
 #: Même contrat que `CHOIX_RESOLUTION_ANALYSE` dans le panneau de réglages.
@@ -84,6 +87,13 @@ FICHIER_MEMOIRE_THEME = pathlib.Path("config") / "local_theme.json"
 #
 # Les couleurs sont en RVB, comme le reste du projet (OpenCV travaille en BGR,
 # mais Qt n'a rien à voir avec la frame).
+#: Flèche des listes déroulantes : une IMAGE livrée, pas un dessin QSS.
+#: Qt ne rend pas le « triangle CSS » (bordures transparentes) et la
+#: flèche native disparait dès que `::drop-down` est stylé — bug connu,
+#: payé en réel le 05/11/2026 (l'opérateur ne voyait AUCUNE flèche sur
+#: les listes). Une image de 12×8 pose le même dessin dans les 3 thèmes.
+FLECHE_URL = chemin_ressource("resources/fleche-bas.png").as_posix()
+
 STYLE_SOMBRE = """
 QWidget { background-color: #14161a; color: #e6e6e6; font-size: 13px; }
 /* Les libellés laissent voir la carte qui les porte : la règle QWidget
@@ -126,6 +136,7 @@ QComboBox, QSpinBox, QDoubleSpinBox {
 QComboBox:hover, QSpinBox:hover, QDoubleSpinBox:hover { border-color: #454c56; }
 QComboBox:focus, QSpinBox:focus, QDoubleSpinBox:focus { border-color: #2563eb; }
 QComboBox::drop-down { border: none; width: 24px; }
+QComboBox::down-arrow { image: url("%FLECHE_URL%"); width: 12px; height: 8px; margin-right: 6px; }
 QComboBox QAbstractItemView {
     background-color: #1b1f26; color: #e6e6e6; border: 1px solid #3a4048;
     selection-background-color: #2563eb; selection-color: #ffffff; outline: none;
@@ -234,6 +245,7 @@ QComboBox, QSpinBox, QDoubleSpinBox {
 QComboBox:hover, QSpinBox:hover, QDoubleSpinBox:hover { border-color: #b9bfc9; }
 QComboBox:focus, QSpinBox:focus, QDoubleSpinBox:focus { border-color: #2563eb; }
 QComboBox::drop-down { border: none; width: 24px; }
+QComboBox::down-arrow { image: url("%FLECHE_URL%"); width: 12px; height: 8px; margin-right: 6px; }
 QComboBox QAbstractItemView {
     background-color: #ffffff; color: #1f2430; border: 1px solid #d3d7de;
     selection-background-color: #2563eb; selection-color: #ffffff; outline: none;
@@ -322,6 +334,7 @@ QComboBox, QSpinBox, QDoubleSpinBox {
 QComboBox:hover, QSpinBox:hover, QDoubleSpinBox:hover { border-color: #475569; }
 QComboBox:focus, QSpinBox:focus, QDoubleSpinBox:focus { border-color: #3b82f6; }
 QComboBox::drop-down { border: none; width: 24px; }
+QComboBox::down-arrow { image: url("%FLECHE_URL%"); width: 12px; height: 8px; margin-right: 6px; }
 QComboBox QAbstractItemView {
     background-color: #16213a; color: #e2e8f0; border: 1px solid #334155;
     selection-background-color: #3b82f6; selection-color: #ffffff; outline: none;
@@ -377,9 +390,16 @@ QProgressBar::chunk { background-color: #3b82f6; border-radius: 5px; }
 #: Styles par mode RÉEL — la clé « systeme » n'existe pas ici : elle est
 #: résolue en sombre ou clair par `mode_reel` avant toute application.
 STYLES: dict[str, str] = {
-    "sombre": STYLE_SOMBRE,
-    "clair": STYLE_CLAIR,
-    "marine": STYLE_MARINE,
+    # Le jeton %FLECHE_URL% est remplacé ICI, au seul point de consommation :
+    # les feuilles restent des chaînes figées (les accolades CSS interdisent
+    # les f-strings), et la flèche résolue n'existe que dans les styles
+    # effectivement appliqués.
+    mode: feuille.replace("%FLECHE_URL%", FLECHE_URL)
+    for mode, feuille in (
+        ("sombre", STYLE_SOMBRE),
+        ("clair", STYLE_CLAIR),
+        ("marine", STYLE_MARINE),
+    )
 }
 
 

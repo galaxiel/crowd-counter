@@ -215,6 +215,8 @@ a = Analysis(
         # L'icône de fenêtre, chargée depuis le disque à l'exécution
         # (`interface/ressources.py` — même mécanisme que default.json).
         (str(CHEMIN_ICONE), "resources"),
+        # La flèche des listes déroulantes (QSS ::down-arrow, style.py).
+        (str(RACINE / "resources" / "fleche-bas.png"), "resources"),
         # `uv.exe` part dans `_internal/`, donc dans `sys._MEIPASS`. C'est le
         # premier endroit que `compteur.telechargement.uv_exe` cherche.
         (str(UV_EXE), "."),

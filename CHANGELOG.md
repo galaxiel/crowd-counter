@@ -8,6 +8,19 @@ notes de release détaillées (anglais) accompagnent chaque version sur la
 Les poids `.pt` ne sont pas dans les archives : les modèles `tetes-*.pt`
 doivent être posés dans `modeles/` (voir le README).
 
+## [Non publié]
+
+### Ajouté
+
+- **Flèche visible sur toutes les listes déroulantes.** Le style des
+  listes faisait disparaitre la flèche native de Qt : rien n'indiquait
+  qu'une liste s'ouvrait. Une flèche dessinée (image livrée
+  `resources/fleche-bas.png`) est posée sur chaque liste, dans les trois
+  thèmes.
+- **Le thème bleu marine est le thème par défaut** des nouvelles
+  installations (c'est un thème sombre lui-même : la lisibilité extérieure
+  est conservée).
+
 ## [2.7.1] — 2026-11-05
 
 ### Corrigé

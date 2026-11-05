@@ -207,3 +207,16 @@ def test_mode_systeme_armer_le_suivi_des_l_ouverture(application, fichier_theme)
         assert application.styleSheet() == STYLES["clair"]
     finally:
         fenetre.close()
+
+
+def test_fleche_des_listes_livree_et_referencee():
+    """La flèche des listes déroulantes est une IMAGE livrée (le QSS seul
+    ne dessine rien : ::drop-down stylé fait disparaitre la flèche native,
+    et Qt ne rend pas le « triangle CSS »). Sans elle, aucune liste ne
+    montre qu'elle s'ouvre — bug réel du 05/11/2026."""
+    from interface.ressources import chemin_ressource
+
+    assert chemin_ressource("resources/fleche-bas.png").is_file()
+    for feuille in STYLES.values():
+        assert "fleche-bas.png" in feuille, feuille[:200]
+        assert 'url("' in feuille  # un chemin avec espace exige les guillemets
