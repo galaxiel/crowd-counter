@@ -232,7 +232,6 @@ class Detecteur:
         kw = dict(
             conf=self.config.seuil_confiance,
             imgsz=self.config.taille_entree,
-            iou=self.config.iou_nms,
             verbose=False,
         )
         # `half` n'est passé QUE quand il est actif : les faux modèles des
@@ -280,7 +279,6 @@ class Detecteur:
         kw = dict(
             conf=self.config.seuil_confiance,
             imgsz=self.config.taille_entree,
-            iou=self.config.iou_nms,
             verbose=False,
         )
         if self._half:
