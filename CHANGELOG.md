@@ -8,7 +8,7 @@ notes de release détaillées (anglais) accompagnent chaque version sur la
 Les poids `.pt` ne sont pas dans les archives : les modèles `tetes-*.pt`
 doivent être posés dans `modeles/` (voir le README).
 
-## [Non publié]
+## [2.6.4] — 2026-11-05
 
 ### Ajouté
 
@@ -32,7 +32,9 @@ doivent être posés dans `modeles/` (voir le README).
   le premier test réel bout-en-bout (l'app tournait depuis le dossier
   d'étape). Toute mise à jour DEPUIS une version ≤ 2.6.3 échoue au même
   endroit, sans danger (compléter à la main depuis le dossier `.maj-X`) ;
-  depuis la 2.6.4, l'échange est automatique pour de bon.
+  **à partir de cette version, l'échange est automatique pour de bon** —
+  installez cette 2.6.4 manuellement une dernière fois, les suivantes se
+  mettront à jour toutes seules.
 - **Identité de barre des tâches explicite** (AppUserModelID) : sans elle,
   Windows peut afficher l'icône en cache des builds précédents.
 
