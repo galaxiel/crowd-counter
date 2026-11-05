@@ -250,7 +250,7 @@ def test_preparer_staging_ecrit_le_script_et_migre(tmp_path):
     )
     assert bat.exists() and bat.name == "mise-a-jour.bat"
     texte = bat.read_text(encoding="cp1252")
-    assert "tasklist" in texte
+    assert "Get-Process" in texte
     assert "CompteurManifestation.ancienne" in texte
     assert "CompteurManifestation\\CompteurManifestation.exe" in texte
     # Les données ont suivi dans l'étape.
@@ -335,3 +335,21 @@ def test_script_echange_chemin_de_la_nouvelle_version_non_double():
     texte = mise_a_jour.texte_script_echange()
     assert 'move /Y "%~dp0CompteurManifestation" "CompteurManifestation"' in texte
     assert "%~dp0.maj-" not in texte
+
+
+def test_script_echange_attente_sans_pipe_ni_console():
+    """Bug réel du 05/11 : l'échange s'est FIGÉ au premier tour d'attente —
+    `find.exe` bloqué sur le pipe `tasklist | find` (write-end jamais fermé
+    dans le contexte détaché sans console), `cmd` resté vivant, journal à
+    une ligne, mise à jour jamais terminée. L'attente est désormais UNE
+    commande PowerShell sans pipe, qui sort quand le processus disparaît ;
+    `timeout.exe` (qui exige une console) a disparu au passage."""
+    texte = mise_a_jour.texte_script_echange()
+    assert "timeout /t" not in texte
+    assert "| find" not in texte
+    assert "tasklist" not in texte
+    assert "powershell -NoProfile" in texte
+    assert "Get-Process CompteurManifestation" in texte
+    # L'attente précède le premier renommage : on ne touche à rien tant que
+    # l'application n'a pas rendu la main.
+    assert texte.index("Get-Process") < texte.index("renommage")

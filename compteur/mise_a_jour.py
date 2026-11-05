@@ -62,6 +62,10 @@ MARGE_EXTRACTION = 1.2
 
 EXE_NOM = "CompteurManifestation.exe"
 
+#: Nom du processus pour l'attente PowerShell du script d'échange
+#: (`Get-Process` interroge par nom, sans extension).
+PROC_NOM = EXE_NOM.removesuffix(".exe")
+
 
 # -- Versions ------------------------------------------------------------
 
@@ -380,6 +384,14 @@ def texte_script_echange() -> str:
     sait que la nouvelle version a démarré. Les commentaires du bat sont
     en ASCII pur : il est écrit en cp1252 et un accent mal décodé ne doit
     jamais faire douter d'une ligne de commande.
+
+    **L'attente de sortie de l'app : PowerShell — ni pipe, ni `timeout`.**
+    Deux pièges mortels dans un contexte DÉTACHÉ (sans console), tous deux
+    payés en vrai le 05/11 : `timeout.exe` exige une console, et le pipe
+    `tasklist | find` s'est FIGÉ (`find` bloqué sur un write-end jamais
+    fermé — cmd resté vivant des minutes, journal à une ligne, échange
+    jamais terminé). L'attente est donc UNE commande PowerShell sans pipe,
+    qui rend la main dès que le processus a disparu.
     """
     return f"""@echo off
 rem Echange de l'installation - genere par CompteurManifestation.
@@ -393,8 +405,10 @@ set "JOURNAL=%LOCALAPPDATA%\\CompteurManifestation\\journal-mise-a-jour.log"
 mkdir "%LOCALAPPDATA%\\CompteurManifestation" >nul 2>&1
 echo [%DATE% %TIME%] echange : attente de la sortie de l'exe > "%JOURNAL%"
 pushd "%~dp0.."
-:attendre
-tasklist /FI "IMAGENAME eq {EXE_NOM}" 2>nul | find /I "{EXE_NOM}" >nul && (timeout /t 1 /nobreak >nul & goto attendre)
+rem Attente de la sortie de l'app : une commande PowerShell, SANS pipe et
+rem SANS timeout (les deux se bloquent dans ce contexte detache - bugs
+rem reels des 04 et 05/11, cf. mise_a_jour.texte_script_echange).
+powershell -NoProfile -Command "while (Get-Process {PROC_NOM} -ErrorAction SilentlyContinue) {{ Start-Sleep -Seconds 1 }}"
 echo [%TIME%] renommage de l'ancienne installation en sauvegarde >> "%JOURNAL%"
 move /Y "CompteurManifestation" "CompteurManifestation.ancienne" >> "%JOURNAL%" 2>&1
 if errorlevel 1 goto echec
