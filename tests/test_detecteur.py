@@ -88,7 +88,6 @@ def test_seuil_passe_au_modele():
     assert f.appels[0]["conf"] == 0.42
 
 
-
 def test_filtre_par_taille_minimale():
     """5x5 sous le minimum de 30 px, 100x100 le dépasse."""
     petit = (0, 0, 5, 5, 0.9, 0)
