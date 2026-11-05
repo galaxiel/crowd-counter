@@ -82,7 +82,7 @@ from interface.panneau_reglages import (
     orientation_par_defaut_sens,
 )
 from interface.recap import PanneauRecap, formater_duree
-from interface.ressources import chemin_icone
+from interface.ressources import appliquer_icone_classe, chemin_icone
 from interface.style import (  # noqa: F401  (ré-export pour main.py)
     CHOIX_THEME,
     MODE_DEFAUT,
@@ -386,6 +386,12 @@ class FenetrePrincipale(QMainWindow):
         icone = QIcon(str(chemin_icone()))
         if not icone.isNull():
             self.setWindowIcon(icone)
+        # Correctif du 05/11 : Qt laisse une icône de CLASSE par défaut que
+        # la barre des tâches affiche à la place de l'icône de fenêtre (voir
+        # `ressources.appliquer_icone_classe`). `winId()` force la création
+        # native MAINTENANT : le shell lit l'icône quand la fenêtre
+        # apparaît, la poser après `show()` serait trop tard.
+        appliquer_icone_classe(int(self.winId()))
 
         # Les réglages du DERNIER lancement, pas les défauts du dépôt : un
         # opérateur qui a tuné son seuil hier ne doit pas le retrouver à

@@ -12,7 +12,12 @@ import pytest
 
 pytest.importorskip("PySide6")
 
-from interface.ressources import NOM_ICONE, chemin_icone, chemin_ressource  # noqa: E402
+from interface.ressources import (  # noqa: E402
+    NOM_ICONE,
+    appliquer_icone_classe,
+    chemin_icone,
+    chemin_ressource,
+)
 
 
 @pytest.fixture
@@ -65,5 +70,47 @@ def test_la_fenetre_porte_l_icone(application):
         icone = fenetre.windowIcon()
         assert not icone.isNull()
         assert not icone.pixmap(32, 32).isNull()
+    finally:
+        fenetre.close()
+
+
+# -- Icône de CLASSE (correctif barre des tâches, 05/11) ------------------
+
+
+def test_appliquer_icone_classe_ne_leve_jamais():
+    """Cosmétique Windows : même avec un handle bidon, jamais d'exception.
+
+    Le handle 0 n'est pas une fenêtre : les API échouent en silence — ce qui
+    est exactement le contrat (un échec ne doit pas empêcher l'app de
+    démarrer)."""
+    assert appliquer_icone_classe(0) in (True, False)
+
+
+def test_appliquer_icone_classe_hors_windows(monkeypatch):
+    """Hors Windows : ne fait rien, rend False (la suite tourne sur Linux en CI)."""
+    import interface.ressources as ressources
+
+    monkeypatch.setattr(ressources.sys, "platform", "linux")
+    assert appliquer_icone_classe(123) is False
+
+
+def test_la_fenetre_applique_le_correctif_de_classe(application, monkeypatch):
+    """`FenetrePrincipale` pose l'icône de classe avec le handle natif, dès la
+    construction — AVANT `show()` : le shell lit l'icône quand la fenêtre
+    apparaît, la poser après serait trop tard (bug réel du 05/11, la barre
+    des tâches affichait l'icône par défaut de Qt)."""
+    appels: list[int] = []
+
+    def faux(hwnd):
+        appels.append(hwnd)
+        return True
+
+    monkeypatch.setattr("interface.app.appliquer_icone_classe", faux)
+    from interface.app import FenetrePrincipale
+
+    fenetre = FenetrePrincipale()
+    try:
+        assert appels, "le correctif d'icône de classe n'est pas appelé"
+        assert appels[0] != 0, "le handle natif doit être réel"
     finally:
         fenetre.close()

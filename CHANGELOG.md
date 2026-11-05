@@ -8,6 +8,18 @@ notes de release détaillées (anglais) accompagnent chaque version sur la
 Les poids `.pt` ne sont pas dans les archives : les modèles `tetes-*.pt`
 doivent être posés dans `modeles/` (voir le README).
 
+## [Non publié]
+
+### Corrigé
+
+- **L'icône de la barre des tâches affichait un dessin par défaut de Qt**
+  (une petite fenêtre blanche/verte) au lieu du logo, alors que l'exécutable,
+  l'icône de fenêtre et l'icône vue par l'explorateur étaient toutes
+  correctes. Cause : Qt enregistre la classe de fenêtre avec sa propre icône
+  par défaut, que le shell utilisait pour le bouton. L'icône de classe est
+  désormais posée explicitement sur le logo avant l'affichage de la fenêtre
+  (`interface/ressources.py::appliquer_icone_classe`).
+
 ## [2.6.5] — 2026-11-05
 
 ### Ajouté
