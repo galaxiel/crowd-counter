@@ -8,10 +8,20 @@ notes de release détaillées (anglais) accompagnent chaque version sur la
 Les poids `.pt` ne sont pas dans les archives : les modèles `tetes-*.pt`
 doivent être posés dans `modeles/` (voir le README).
 
-## [Non publié]
+## [2.6.6] — 2026-11-05
 
 ### Corrigé
 
+- **La mise à jour automatique s'arrêtait au premier tour et ne finissait
+  jamais.** Le script qui échange l'installation attendait la fermeture de
+  l'application avec un tube (`tasklist | find`) qui se **fige** dans ce
+  contexte sans console : le script restait vivant indéfiniment, la nouvelle
+  version n'était jamais mise en place et rien ne relançait l'application.
+  L'attente passe désormais par une commande PowerShell sans tube, qui rend
+  la main dès que l'application a disparu. **Conséquence** : les versions
+  ≤ 2.6.5 ne peuvent pas se mettre à jour toutes seules — installez cette
+  2.6.6 à la main une dernière fois, puis le bouton vert fera tout le
+  travail.
 - **L'icône de la barre des tâches affichait un dessin par défaut de Qt**
   (une petite fenêtre blanche/verte) au lieu du logo, alors que l'exécutable,
   l'icône de fenêtre et l'icône vue par l'explorateur étaient toutes
