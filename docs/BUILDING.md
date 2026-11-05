@@ -87,7 +87,7 @@ Publication happens **only on an explicit request** from the operator — the
 same rule as the build. `master` is allowed to be ahead of the last release;
 that is not an oversight to fix.
 
-This is the order used for v2.5.0 through v2.6.2. Do not reorder it: the
+This is the order used for v2.5.0 through v2.6.4. Do not reorder it: the
 archive is proven to start before it is zipped, and hashed before it is
 published. (An earlier draft of this section mandated a FLAT zip — that was
 wrong and would have broken the next update; see the rationale below, and
@@ -100,20 +100,20 @@ build-env\Scripts\python tools\verifier_lancement_exe.py
 # 2. zip — the archive MUST KEEP the wrapping folder: CompteurManifestation/
 #    at the root of the zip, with the .exe, _internal/ and modeles/ inside it.
 #    Without the /* (flattening) — the updater refuses a flat archive.
-pwsh -NoProfile -Command "Compress-Archive -Path 'dist/CompteurManifestation' -DestinationPath 'dist/CompteurManifestationV2-vX.Y.Z-win64.zip' -Force"
+pwsh -NoProfile -Command "Compress-Archive -Path 'dist/CompteurManifestation' -DestinationPath 'dist/CompteurManifestation-vX.Y.Z-win64.zip' -Force"
 
 # 3. hash — from git-bash, INSIDE the folder that holds the zip, so the
 #    asset records a bare filename instead of a local path (see the trap
 #    below)
-cd dist && sha256sum CompteurManifestationV2-vX.Y.Z-win64.zip | tee CompteurManifestationV2-vX.Y.Z-win64.zip.sha256
+cd dist && sha256sum CompteurManifestation-vX.Y.Z-win64.zip | tee CompteurManifestation-vX.Y.Z-win64.zip.sha256
 
 # 4. put the same value as the LAST line of the release notes
 #    **SHA-256**: <hash>
 
 # 5. publish — this also creates the tag vX.Y.Z
 gh release create vX.Y.Z \
-  CompteurManifestationV2-vX.Y.Z-win64.zip \
-  CompteurManifestationV2-vX.Y.Z-win64.zip.sha256 \
+  CompteurManifestation-vX.Y.Z-win64.zip \
+  CompteurManifestation-vX.Y.Z-win64.zip.sha256 \
   --notes-file release-notes-vX.Y.Z.md
 
 # 6. verify BOTH assets are actually on the page (a silent upload is not a
@@ -131,6 +131,26 @@ the update fails safely, nothing is installed. The wrapping folder is not a
 cosmetic choice; it is what the updater checks for. (Verified against the
 v2.6.2 release asset before writing this paragraph.)
 
+**Naming: what carries the version, and what must not.** The archive is
+named `CompteurManifestation-vX.Y.Z-win64.zip`. The old
+`CompteurManifestationV2-` prefix was a leftover from the abandoned v1
+(releases up to v2.6.4 carry it; newer ones drop it) — the rename is safe
+because `chercher_release` accepts **any** `*.zip` asset name, as long as the
+checksum asset ends in `.zip.sha256`.
+
+The folder **inside** the archive stays `CompteurManifestation/` and the
+executable stays `CompteurManifestation.exe`, **without any version** — and
+they must stay that way. `preparer_staging` extracts the archive and looks
+for `<staging>/<installed-folder-name>/CompteurManifestation.exe`, and the
+swap script moves and relaunches those exact names. A versioned folder or exe
+would make every future update fail with « archive inattendue » — and since
+the updater that runs during an update is the one **already installed**, an
+old installation could never be taught a different convention
+(chicken-and-egg). Fixed names also keep shortcuts, taskbar pins and external
+scripts working across updates. The version belongs in: the zip name, the
+release tag, the window title, and the exe's Properties → Details
+(`FileVersion`, generated from `compteur.VERSION` at build time).
+
 **Why the `.zip.sha256` asset is not optional.** `lire_derniere_version` looks
 for the asset to know what to verify; without it `sha256` comes back `None` and
 the updater falls back to the degraded path (open the release page). Nothing
@@ -144,7 +164,7 @@ is therefore a silent regression, not a smaller release.
 application only reads the first field so it still works, but the asset is then
 useless to anyone doing `sha256sum -c` on their own download. Run it from
 `dist/`, as in step 3, so the line reads
-`<hash> *CompteurManifestationV2-vX.Y.Z-win64.zip` (the `*` is coreutils'
+`<hash> *CompteurManifestation-vX.Y.Z-win64.zip` (the `*` is coreutils'
 "binary mode" marker, expected and harmless — `sha256sum -c` accepts it).
 
 ## Performance and GPU
