@@ -356,8 +356,8 @@ def test_reinitialiser_oublie_tout():
     assert c._cotes == {}
     assert c._stabilite == {}
     assert c._deja_comptes == set()
-    # La liste est vidée EN PLACE : l'IHM (tâche 11) en garde une référence
-    # pour son panneau d'audit, une réassignation la laisserait sur l'ancienne.
+    # La liste est vidée EN PLACE : l'affichage en garde une référence et la
+    # consomme au fil de l'eau, une réassignation le laisserait sur l'ancienne.
     assert reference_evenements is c.evenements
 
     # Le faux tracker est remis à zéro : le même scénario rejoué recompte.

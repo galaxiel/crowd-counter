@@ -52,8 +52,9 @@ class Compteur:
         self.total = 0
         self.presents = 0
         self.presents_max = 0
-        # Liste mutée en place, jamais réassignée : l'IHM (tâche 11) en garde
-        # une référence pour son panneau d'audit.
+        # Liste mutée en place, jamais réassignée : l'affichage en garde une
+        # référence et la consomme au fil de l'eau — une réassignation le
+        # laisserait branché sur l'ancienne liste.
         self.evenements: list[Evenement] = []
         # Position utilisée pour le test de franchissement : moyenne des K
         # dernières positions connues du track (K = `fenetre_lissage`).

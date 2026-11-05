@@ -220,8 +220,9 @@ The interface comes in **four themes** — dark (default), light, navy blue,
 follow Windows — picked from the selector at the end of the button bar; the
 choice is remembered from one launch to the next. The full walkthrough — the
 direction reminder when the count stays at zero, the sensitivity settings,
-the end-of-analysis summary, audit mode, and how to read the green boxes
-that make a mistake visible — is in [`docs/USAGE.md`](docs/USAGE.md).
+the end-of-analysis summary, the four themes, automatic updates, and how to
+read the green boxes that make a mistake visible — is in
+[`docs/USAGE.md`](docs/USAGE.md).
 
 ## Design decisions and scope
 
@@ -354,8 +355,8 @@ defaults:
 Other limitations:
 
 - **The error rate is never computed automatically.** There is no ground truth
-  without manual annotation. Audit mode measures the gap on what you check,
-  and nothing else.
+  without manual annotation. The only honest gap comes from counting a segment
+  by hand and comparing — `tools/verite_terrain.py` ships for exactly that.
 - **Dense crowds outside the use case.** The counter targets a poorly
   occluded flow (street, spaced passage). When bodies overlap, heads merge
   into a single box and one person can hide two.
@@ -413,7 +414,7 @@ before pushing.
 - [`docs/BUILDING.md`](docs/BUILDING.md) — rebuilding the Windows executable,
   and everything about GPU / CUDA performance.
 - [`docs/USAGE.md`](docs/USAGE.md) — day-to-day use: line, direction,
-  sensitivity, summary, audit mode, green boxes.
+  sensitivity, settings persistence, themes, updates, summary, green boxes.
 - [`docs/design/DESIGN.md`](docs/design/DESIGN.md) — the original design
   specification: use case, algorithm, engine contract, settings rationale.
 - [`docs/design/IMPLEMENTATION-PLAN.md`](docs/design/IMPLEMENTATION-PLAN.md) —
