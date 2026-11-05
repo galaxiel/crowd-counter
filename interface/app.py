@@ -32,6 +32,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 import pathlib
 import time
 
@@ -1417,7 +1418,10 @@ class FenetrePrincipale(QMainWindow):
             )
             return
 
-        self._points_ligne.append((float(x), float(y)))
+        second = aimanter_second_point(
+            self._points_ligne[0], (float(x), float(y))
+        )
+        self._points_ligne.append(second)
         self._apercu_point = None
         self._trace_arme = False
         self.definir_ligne(*self._points_ligne)
@@ -2356,6 +2360,38 @@ class FenetrePrincipale(QMainWindow):
         # ne doit pas empêcher de fermer.
         ecrire_derniere_config(self.config)
         super().closeEvent(event)
+
+
+#: Un tracé à moins de cet angle de l'horizontale ou de la verticale se
+#: colle exactement droit (magnétisme, demande opérateur du 05/11/2026 :
+#: une ligne penchée de 1-2° faisait diverger la zone de détection du dessin).
+TOLERANCE_AIMANT_DEGRES = 3.0
+
+
+def aimanter_second_point(
+    p1: tuple[float, float], p2: tuple[float, float]
+) -> tuple[float, float]:
+    """Rend ``p2`` exactement aligné sur ``p1`` si le tracé frôle H ou V.
+
+    Le tracé à main levée frôle souvent l'horizontale ou la verticale sans
+    y être exactement : la ligne reste penchée de 1-2° et la zone de
+    détection (rectangle droit) diverge du dessin. À moins de
+    `TOLERANCE_AIMANT_DEGRES` de l'horizontale ou de la verticale, le
+    second point est recalé exactement dessus. Entre les deux, le tracé
+    libre est respecté — un tracé volontairement diagonal n'est pas
+    déplacé.
+    """
+    dx = float(p2[0]) - float(p1[0])
+    dy = float(p2[1]) - float(p1[1])
+    if dx == 0.0 or dy == 0.0:
+        return p2  # déjà exactement aligné
+    limite = math.tan(math.radians(TOLERANCE_AIMANT_DEGRES))
+    pente = abs(dy / dx)
+    if pente <= limite:
+        return (float(p2[0]), float(p1[1]))  # horizontal
+    if pente >= 1.0 / limite:
+        return (float(p1[0]), float(p2[1]))  # vertical
+    return p2
 
 
 def _marquer_point(img, point: tuple[int, int]):

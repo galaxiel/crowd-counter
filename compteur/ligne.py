@@ -467,15 +467,87 @@ class Ligne:
         if img.dtype == np.uint8 and img.flags.c_contiguous:
             cv2 = _cv2()
             sortie = cv2.LUT(img, (np.arange(256, dtype=np.float32) * FACTEUR_VOILE).astype(np.uint8))
-            sortie[y1:y2, x1:x2] = img[y1:y2, x1:x2]
+            self._restituer_bande(sortie, img)
             return sortie
         # Autre dtype ou buffer non contigu (tests, sources exotiques) :
         # chemin historique, correct quel que soit le type.
         sortie = img.astype(np.float32, copy=True) * FACTEUR_VOILE
-        sortie[y1:y2, x1:x2] = img[y1:y2, x1:x2]
+        self._restituer_bande(sortie, img)
         # L'arrondi est fait UNE fois, à la fin : arrondir puis recoller la
         # bande laisserait un liseré d'une nuance au bord de la zone.
         return np.clip(sortie, 0, 255).astype(img.dtype)
+
+    def _polygone_bande(
+        self, largeur_image: int, hauteur_image: int
+    ) -> "np.ndarray | None":
+        """Polygone de la zone ÉPARGNÉE par le voile, en pixels image.
+
+        C'est la bande autour de la DROITE (la ligne prolongée hors cadre)
+        rognée par le rectangle de détection `rect_bande_detection` — la
+        même zone que le comptage, qui n'est pas bornée LE LONG de la ligne
+        (`a_traverse` teste la droite infinie) mais l'est par le rognage.
+        Sur une ligne inclinée, ce polygone est oblique : c'est le but du
+        correctif du 05/11/2026, dont l'opérateur a fait le constat (« les
+        zones de détection ne suivent pas l'inclinaison »).
+
+        `None` si l'intersection est vide (en pratique impossible quand
+        `rect_bande_detection` est non `None` : la droite traverse son
+        propre rectangle englobant).
+        """
+        if self.bande_avant_px is None:
+            return None
+        rect = self.rect_bande_detection(largeur_image, hauteur_image)
+        if rect is None:
+            return None
+        x1, y1, x2, y2 = rect
+        # La droite, prolongée bien hors du rectangle avant découpage.
+        portee = (x2 - x1) + (y2 - y1) + max(x2, y2)
+        dx, dy = self._d
+        a = (self.p1[0] - dx * portee, self.p1[1] - dy * portee)
+        b = (self.p2[0] + dx * portee, self.p2[1] + dy * portee)
+        nx, ny = self._n
+        avant, apres = float(self.bande_avant_px), float(self.bande_apres_px)
+        ruban = np.array(
+            [
+                [b[0] + nx * avant, b[1] + ny * avant],
+                [a[0] + nx * avant, a[1] + ny * avant],
+                [a[0] - nx * apres, a[1] - ny * apres],
+                [b[0] - nx * apres, b[1] - ny * apres],
+            ],
+            dtype=np.float32,
+        )
+        cadre = np.array(
+            [[x1, y1], [x2 - 1.0, y1], [x2 - 1.0, y2 - 1.0], [x1, y2 - 1.0]],
+            dtype=np.float32,
+        )
+        cv2 = _cv2()
+        # Renvoie (flag, points) selon les versions d'OpenCV : on ne garde
+        # que le polygone.
+        _flag, intersection = cv2.intersectConvexConvex(ruban, cadre)
+        if intersection is None or intersection.size == 0:
+            return None
+        return intersection
+
+    def _restituer_bande(self, sortie: np.ndarray, img: np.ndarray) -> None:
+        """Recolle dans `sortie` (voilée) les pixels de `img` DANS la bande.
+
+        Le masque est le polygone `_polygone_bande` — sur une ligne
+        inclinée il ne suit PAS un rectangle. Remplace l'ancien recollage
+        du rectangle droit, qui laissait visibles des coins que le
+        comptage n'utilisait pas : l'affiche et le compte divergeaient
+        sous les yeux de l'opérateur. Pour une ligne horizontale ou
+        verticale, le polygone EST le rectangle : rendu identique au
+        pixel près.
+        """
+        polygone = self._polygone_bande(img.shape[1], img.shape[0])
+        if polygone is None:
+            return
+        masque = np.zeros(img.shape[:2], dtype=np.uint8)
+        cv2 = _cv2()
+        cv2.fillPoly(masque, [np.rint(polygone).astype(np.int32)], 1)
+        # Le masque est (H, W) et les images (H, W, C) : un axe canal pour
+        # que la diffusion `where` s'applique aux trois canaux.
+        np.copyto(sortie, img, where=masque.astype(bool)[:, :, None])
 
     def dessiner(self, img: np.ndarray) -> np.ndarray:
         """Trace ligne, bande et flèche de sens. Ne mute pas ``img``.

@@ -21,6 +21,26 @@ doivent être posés dans `modeles/` (voir le README).
   installations (c'est un thème sombre lui-même : la lisibilité extérieure
   est conservée).
 
+## [Non publié]
+
+### Corrigé
+
+- **Sur une ligne inclinée, la zone de détection ne suivait pas le dessin.**
+  Le rognage est un rectangle droit englobant : ses coins dépassaient de la
+  bande réelle, et le voile affiché restait droit. Désormais les détections
+  hors de la bande oblique sont écartées ET le voile suit l'inclinaison —
+  l'affiche et le comptage décrivent exactement la même zone. Aucun
+  changement pour une ligne horizontale ou verticale (rectangle = bande).
+
+### Modifié
+
+- **Ligne de comptage plus lisible** (demande opérateur) : flèche de sens
+  deux fois plus longue et épaisse, croix de placement doublées, trait de
+  ligne plus épais.
+- **Magnétisme du tracé** : une ligne tracée à moins de 3° de l'horizontale
+  ou de la verticale se colle exactement droite (recalage du second point).
+  Un tracé franchement diagonal n'est pas déplacé.
+
 ## [2.7.1] — 2026-11-05
 
 ### Corrigé

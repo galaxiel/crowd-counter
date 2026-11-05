@@ -294,3 +294,49 @@ def test_dessiner_ne_crash_pas_et_ne_mute_pas():
     assert sortie.shape == img.shape
     assert np.array_equal(img, avant), "dessiner() ne doit pas modifier l'image source"
     assert sortie.any(), "la ligne doit être visible"
+
+
+def test_voile_incline_suit_la_ligne():
+    """Correctif du 05/11/2026 (constat opérateur) : sur une ligne inclinée,
+    le voile restait un RECTANGLE droit — l'affiche montrait une zone plus
+    grande que la bande réelle. Le voile épargne désormais le polygone de la
+    bande (droite prolongée ± bande, rognée au rectangle de détection)."""
+    import numpy as np
+
+    from compteur.config import FACTEUR_VOILE
+
+    # Ligne inclinée ~26.6°, bande 250/250 : le rectangle de détection
+    # englobe la bande oblique, ses coins en dépassent.
+    ligne = Ligne((0, 400), (600, 700), epaisseur=30, sens=1, hysteresis=2,
+                  bande_avant_px=250, bande_apres_px=250)
+    img = np.full((1000, 800, 3), 200, dtype=np.uint8)
+    sortie = ligne.voiler(img)
+
+    # Un coin du rectangle, HORS de la bande oblique : voilé (200 -> 120).
+    x1, y1, x2, y2 = ligne.rect_bande_detection(800, 1000)
+    coin_x, coin_y = x2 - 2, y1 + 2
+    assert abs(ligne.coordonnee_projetee((coin_x, coin_y))) > 250
+    assert sortie[coin_y, coin_x, 0] == int(200 * FACTEUR_VOILE)
+
+    # Un point SUR la ligne, au-delà de l'extrémité p2 : dans la bande de la
+    # droite prolongée, il reste épargné — fidèle au comptage.
+    centre = (300, 550)
+    assert abs(ligne.coordonnee_projetee(centre)) < 250
+    assert sortie[centre[1], centre[0], 0] == 200
+
+
+def test_voile_droit_inchange():
+    """Ligne exactement verticale : le polygone EST le rectangle de
+    détection, le rendu est identique à l'ancien (aucune régression)."""
+    import numpy as np
+
+    from compteur.config import FACTEUR_VOILE
+
+    ligne = Ligne((400, 50), (400, 950), epaisseur=30, sens=1, hysteresis=2,
+                  bande_avant_px=250, bande_apres_px=250)
+    img = np.full((1000, 800, 3), 200, dtype=np.uint8)
+    sortie = ligne.voiler(img)
+    assert sortie[10, 10, 0] == int(200 * FACTEUR_VOILE)   # loin : voilé
+    assert sortie[500, 400, 0] == 200                       # sur la ligne : net
+    assert sortie[500, 200, 0] == 200                       # dans la bande : net
+    assert sortie[500, 100, 0] == int(200 * FACTEUR_VOILE)  # hors bande : voilé

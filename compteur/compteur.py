@@ -273,9 +273,25 @@ class Compteur:
         même logique de comptage — toute différence y serait un décompte faux
         selon la taille du lot.
         """
+        # La zone fidèle au DESSIN (correctif du 05/11/2026) : le rognage
+        # (`rect_bande_detection`) est un rectangle DROIT englobant — sur une
+        # ligne inclinée, ses coins dépassent de la bande réelle (± bande
+        # autour de la DROITE). Les détections hors de la coordonnée projetée
+        # de la bande sont écartées ici, AVANT le suivi : la zone de comptage
+        # devient exactement celle que le voile montre. Pour une ligne
+        # horizontale ou verticale, rectangle et bande coïncident : AUCUN
+        # changement de comportement.
+        ligne = self.ligne
+        if ligne is not None and ligne.bande_avant_px is not None:
+            detections = [
+                d
+                for d in detections
+                if -ligne.bande_apres_px
+                <= ligne.coordonnee_projetee(d.center)
+                <= ligne.bande_avant_px
+            ]
         tracks = self.tracker.mettre_a_jour(detections, frame_index)
         nouveaux: list[Evenement] = []
-        ligne = self.ligne
 
         # Indicateurs de fiabilité, cumulés frame par frame.
         self._nb_detections += len(detections)

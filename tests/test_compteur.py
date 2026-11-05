@@ -522,3 +522,75 @@ def test_le_faux_tracker_bien_joue_le_scenario():
 def test_une_detection_bien_construite():
     d = Detection(x1=0.0, y1=0.0, x2=10.0, y2=10.0, score=0.9, class_id=0)
     assert d.center == (5.0, 5.0)
+
+
+def test_detections_hors_bande_oblique_ecartees():
+    """Correctif du 05/11/2026 : sur une ligne inclinée, une détection dans
+    un coin du rectangle de détection mais HORS de la bande oblique n'est
+    pas suivie — la zone de comptage est fidèle au dessin. (Sur une ligne
+    droite H/V, rectangle et bande coïncident : rien ne change.)"""
+    import numpy as np
+
+    from compteur.tracker import Tracker
+    from compteur.types import Detection
+
+    class EspionTracker:
+        def __init__(self):
+            self.recues = []
+
+        def mettre_a_jour(self, detections, frame_index):
+            self.recues.append(list(detections))
+            return []
+
+        def reinitialiser(self):
+            self.recues.clear()
+
+    config = Config(frames_confirmation=1)
+    # Ligne inclinée ~26.6° : le coin bas-droit du rectangle de détection est
+    # hors de la bande oblique (coordonnée projetée ~ -516 pour 250).
+    ligne = Ligne((0, 400), (600, 700), epaisseur=30, sens=1, hysteresis=2,
+                  bande_avant_px=250, bande_apres_px=250)
+    c = Compteur(config, FauxDetecteur(), EspionTracker())
+    c.ajuster_ligne(ligne)
+    img = np.zeros((1000, 800, 3), dtype=np.uint8)
+
+    coin = Detection(705.0, 173.0, 715.0, 183.0, 0.9, 0)
+    assert abs(ligne.coordonnee_projetee(coin.center)) > 250
+    c._integrer(img, [coin], 0, 0.0)
+    assert c.tracker.recues[-1] == []
+
+    sur_ligne = Detection(295.0, 545.0, 305.0, 555.0, 0.9, 0)
+    assert abs(ligne.coordonnee_projetee(sur_ligne.center)) < 250
+    c._integrer(img, [sur_ligne], 1, 0.04)
+    assert len(c.tracker.recues[-1]) == 1
+
+
+def test_detections_hors_bande_droite_inchange():
+    """Ligne exactement verticale : TOUTE détection dans le rectangle est
+    dans la bande (rectangle = bande) — le filtre ne retire rien."""
+    import numpy as np
+
+    from compteur.tracker import Tracker
+    from compteur.types import Detection
+
+    class EspionTracker:
+        def __init__(self):
+            self.recues = []
+
+        def mettre_a_jour(self, detections, frame_index):
+            self.recues.append(list(detections))
+            return []
+
+        def reinitialiser(self):
+            self.recues.clear()
+
+    config = Config(frames_confirmation=1)
+    ligne = Ligne((400, 50), (400, 950), epaisseur=30, sens=1, hysteresis=2,
+                  bande_avant_px=250, bande_apres_px=250)
+    c = Compteur(config, FauxDetecteur(), EspionTracker())
+    c.ajuster_ligne(ligne)
+    img = np.zeros((1000, 800, 3), dtype=np.uint8)
+
+    bord = Detection(150.0, 490.0, 160.0, 500.0, 0.9, 0)  # bord extrême de la bande
+    c._integrer(img, [bord], 0, 0.0)
+    assert len(c.tracker.recues[-1]) == 1
