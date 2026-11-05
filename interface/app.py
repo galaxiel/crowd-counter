@@ -74,11 +74,10 @@ from compteur.detecteur import (
     message_modele_absent,
     peripherique_effectif,
 )
-from compteur.ligne import Ligne
+from compteur.ligne import LIBELLES_SENS, Ligne
 from compteur.tracker import Tracker
 from interface.overlay import dessiner
 from interface.panneau_reglages import (
-    LIBELLES_SENS,
     PanneauReglages,
     orientation_par_defaut_sens,
 )
@@ -419,6 +418,9 @@ class FenetrePrincipale(QMainWindow):
         self._trace_arme = False
         #: Le traitement tourne (minuterie de traitement active).
         self._en_analyse = False
+        #: Une analyse a AU MOINS été lancée sur la vidéo chargée — c'est
+        #: ce qui distingue « Recommencer » d'un second « Lancer ».
+        self._une_analyse_faite = False
         #: Une analyse a été démarrée et n'est pas terminée (pause comprise).
         self._session_ouverte = False
         #: Horloge de départ de l'analyse EN COURS (`time.monotonic`), pour le
@@ -653,21 +655,42 @@ class FenetrePrincipale(QMainWindow):
         self.btn_ligne.setToolTip(
             "Clique ensuite deux points sur l'image, aux deux extrémités de "
             "la limite que tu veux compter.\n"
-            "Le sens se lit ensuite dans les réglages, avec des libellés "
-            "explicites : « Gauche → droite » ou « Droite → gauche » sur une "
-            "ligne verticale, « Haut → bas » ou « Bas → haut » sur une ligne "
-            "horizontale."
+            "Le sens se règle ensuite d'un clic sur le bouton « Sens : … » "
+            "de cette barre — son libellé dit exactement ce qui est compté."
         )
+        # Le sens de comptage vit ICI, pas dans le panneau (demande
+        # opérateur du 05/11/2026) : c'est un geste de la vidéo, pas un
+        # réglage du moteur — on l'inverse d'un clic, la flèche verte le
+        # montre tout de suite.
+        self.btn_sens = QPushButton("")
+        self.btn_sens.setToolTip(
+            "Inverse le sens de comptage (la flèche verte montre le sens "
+            "compté)."
+        )
+        self.btn_sens.clicked.connect(self._on_inverser_sens)
         self.btn_lancer = QPushButton("Lancer")
         self.btn_lancer.setObjectName("primaire")
         self.btn_pause = QPushButton("Pause")
         self.btn_stop = QPushButton("Stop")
+        # « Recommencer » est le LANCER du deuxième essai : même action
+        # (rembobinage, compteur à zéro, modèle conservé), nom explicite —
+        # en fin d'analyse, « Lancer » tout seul ne disait pas qu'un essai
+        # repartait de zéro sans recharger la vidéo (constat opérateur).
+        self.btn_recommencer = QPushButton("Recommencer")
+        self.btn_recommencer.setToolTip(
+            "Relance l'analyse du DÉBUT : la vidéo est rembobinée, le "
+            "compteur remis à zéro. Le modèle reste chargé — ça repart "
+            "tout de suite."
+        )
+        self.btn_recommencer.clicked.connect(self.lancer)
         for b in (
             self.btn_video,
             self.btn_ligne,
+            self.btn_sens,
             self.btn_lancer,
             self.btn_pause,
             self.btn_stop,
+            self.btn_recommencer,
         ):
             barre.addWidget(b)
 
@@ -2008,6 +2031,46 @@ class FenetrePrincipale(QMainWindow):
         self.recap.afficher(resultat)
         self.recap.setVisible(True)
 
+    def _libelle_sens(self) -> str:
+        """Le libellé du sens compté, exprimé selon la ligne tracée.
+
+        Avec ligne : les libellés de la LIGNE (`Ligne.choix_sens`) —
+        « Gauche → droite » sur une verticale, « Haut → bas » sur une
+        horizontale. Sans ligne : l'orientation supposée, la même que
+        celle qu'affichait l'ancien menu du panneau.
+        """
+        if self.ligne is not None:
+            choix = self.ligne.choix_sens()
+        else:
+            base = LIBELLES_SENS[orientation_par_defaut_sens()]
+            choix = [(base[0], 1), (base[1], -1)]
+        correspondance = {v: libelle for libelle, v in choix}
+        return correspondance.get(int(self.config.sens), "?")
+
+    def _maj_libelle_sens(self) -> None:
+        self.btn_sens.setText(f"Sens : {self._libelle_sens()}")
+
+    def _on_inverser_sens(self) -> None:
+        """Inverse le sens compté (bouton de la barre, demande opérateur).
+
+        Le sens appartient à la Config moteur ET à la ligne (c'est la
+        ligne qui décide quel côté est « départ ») : les deux sont mis à
+        jour ensemble, et la vue est redessinée — la flèche verte pivote
+        sous les yeux de l'opérateur, aucune ambiguïté possible.
+        Interdit pendant l'analyse : la ligne y est verrouillée.
+        """
+        if self._en_analyse or self._chargement_en_cours:
+            return
+        self.config.sens = -int(self.config.sens or 1)
+        self.panneau.definir_sens(self.config.sens)
+        if self.ligne is not None:
+            self._reconstruire_ligne_depuis_config()
+        self._maj_libelle_sens()
+        self._rafraichir_affichage()
+        self.label_statut.setText(
+            f"Sens de comptage : {self._libelle_sens()}"
+        )
+
     def _maj_boutons(self) -> None:
         """Une seule source de vérité pour l'activation des boutons.
 
@@ -2024,9 +2087,19 @@ class FenetrePrincipale(QMainWindow):
         chargement = self._chargement_en_cours
         self.btn_video.setEnabled(not self._en_analyse and not chargement)
         self.btn_ligne.setEnabled(video and not self._en_analyse and not chargement)
+        self.btn_sens.setEnabled(video and not self._en_analyse and not chargement)
         self.btn_lancer.setEnabled(pret and not self._en_analyse and not chargement)
+        # « Recommencer » n'a de sens qu'APRÈS un premier essai : avant,
+        # il serait un second « Lancer » sans rien dire de plus.
+        self.btn_recommencer.setEnabled(
+            pret
+            and not self._en_analyse
+            and not chargement
+            and self._une_analyse_faite
+        )
         self.btn_pause.setEnabled(self._session_ouverte)
         self.btn_stop.setEnabled(self._session_ouverte or chargement)
+        self._maj_libelle_sens()
 
     # -- Boucle de lecture ------------------------------------------------
 
@@ -2364,8 +2437,9 @@ class FenetrePrincipale(QMainWindow):
 
 #: Un tracé à moins de cet angle de l'horizontale ou de la verticale se
 #: colle exactement droit (magnétisme, demande opérateur du 05/11/2026 :
-#: une ligne penchée de 1-2° faisait diverger la zone de détection du dessin).
-TOLERANCE_AIMANT_DEGRES = 3.0
+#: une ligne penchée de 1-2° faisait diverger la zone de détection du
+#: dessin). 5° sur SA demande d'essai — la main tremble plus qu'on croit.
+TOLERANCE_AIMANT_DEGRES = 5.0
 
 
 def aimanter_second_point(

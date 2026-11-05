@@ -41,6 +41,21 @@ doivent être posés dans `modeles/` (voir le README).
   ou de la verticale se colle exactement droite (recalage du second point).
   Un tracé franchement diagonal n'est pas déplacé.
 
+## [Non publié]
+
+### Ajouté
+
+- **Bouton « Sens : … » dans la barre de boutons** (demande opérateur) :
+  le sens de comptage s'inverse d'un clic, avec son libellé explicite et
+  la flèche verte qui pivote. L'option « Sens de traversée » quitte le
+  panneau de réglages — le panneau ne fait que porter la valeur, les
+  profils continuent de l'appliquer.
+- **Bouton « Recommencer »** (demande opérateur) : relance l'analyse du
+  début sans recharger la vidéo — la vidéo est rembobinée, le compteur
+  remis à zéro, le modèle reste chargé. Il n'apparait qu'après un premier
+  essai ; c'est le « Lancer » du deuxième essai, avec un nom qui le dit.
+- **Magnétisme du tracé porté à 5°** (demande opérateur, réglé par essai).
+
 ## [2.7.1] — 2026-11-05
 
 ### Corrigé

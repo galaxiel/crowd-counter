@@ -13,12 +13,10 @@ import pytest
 pytest.importorskip("PySide6")
 
 from compteur.config import Config  # noqa: E402
-from compteur.ligne import LIBELLES_SENS  # noqa: E402
 from interface.panneau_reglages import (  # noqa: E402
     AIDE,
     PanneauReglages,
     lister_modeles,
-    orientation_par_defaut_sens,
 )
 
 
@@ -448,55 +446,43 @@ def test_le_repertoire_courant_est_par_default(application, monkeypatch, tmp_pat
     assert PanneauReglages(Config(modele="nano.pt")).lire().modele == "nano.pt"
 
 
-# -- Sens : libellés explicites, pilotés par la ligne tracée -------------
+# -- Sens : valeur PORTÉE par le panneau, réglée depuis la barre ---------
 
 
-def _libelles(p):
-    return [p._sens.itemText(i) for i in range(p._sens.count())]
-
-
-def test_sens_affiche_des_libelles_de_direction_pas_avant_apres(application):
-    """« Avant → après » ne disait pas avant quoi : plus rien ne doit l'afficher."""
+def test_le_sens_n_est_plus_un_widget_du_panneau(application):
+    """Demande opérateur (05/11/2026) : le sens se règle d'un clic dans la
+    barre de boutons de la fenêtre, plus dans le panneau de réglages."""
     p = PanneauReglages(Config())
-    libelles = " ".join(_libelles(p))
-    assert "Avant" not in libelles
-    assert "Après" not in libelles
-    assert set(_libelles(p)) == set(LIBELLES_SENS[orientation_par_defaut_sens()])
+    assert not hasattr(p, "_sens")
 
 
-def test_sens_verticale_affiche_gauche_droite_et_droite_gauche(application):
+def test_definir_sens_change_ce_que_lire_renvoie(application):
     p = PanneauReglages(Config())
-    p.definir_ligne((640.0, 0.0, 640.0, 720.0))
-    assert _libelles(p) == ["Gauche → droite", "Droite → gauche"]
+    p.definir_sens(-1)
+    assert p.lire().sens == -1
+    p.definir_sens(1)
+    assert p.lire().sens == 1
 
 
-def test_sens_horizontale_affiche_haut_bas_et_bas_haut(application):
-    """Une ligne tracée à l'horizontale change la NATURE des libellés.
-
-    C'est la demande explicite : « Gauche → droite » sur une ligne horizontale
-    n'aurait aucun sens pour l'opérateur, qui voit les gens monter et descendre.
-    """
+def test_definir_sens_ignore_les_valeurs_invalides(application):
+    """Un profil écrit à la main ne doit pas injecter un sens invalide : la
+    valeur hors {+1, -1} est ignorée, l'ancienne reste en place."""
     p = PanneauReglages(Config())
-    p.definir_ligne((0.0, 400.0, 1280.0, 400.0))
-    assert _libelles(p) == ["Haut → bas", "Bas → haut"]
+    p.definir_sens(0)
+    assert p.lire().sens == 1
+    p.definir_sens(2)
+    assert p.lire().sens == 1
 
 
-def test_libelles_recalcules_quand_la_ligne_change(application):
-    """Passer d'une verticale à une horizontale renomme les choix, sur place."""
+def test_appliquer_un_profil_apporte_le_sens(application):
     p = PanneauReglages(Config())
-    p.definir_ligne((640.0, 0.0, 640.0, 720.0))
-    assert _libelles(p)[0] == "Gauche → droite"
-    p.definir_ligne((0.0, 400.0, 1280.0, 400.0))
-    assert _libelles(p)[0] == "Haut → bas"
+    p.appliquer(Config(sens=-1))
+    assert p.lire().sens == -1
 
 
-def test_changer_de_ligne_ne_change_pas_le_sens_compté(application):
-    """Renommer les choix ne doit pas retourner le comptage.
-
-    Régression centrale : si `lire()` déduisait le `sens` de l'INDICE, le
-    passage vertical -> horizontal pourrait conserver l'indice tout en
-    changeant de sens. Le `sens` est donc attaché au LIBELLÉ, jamais à sa place.
-    """
+def test_changer_de_ligne_ne_change_pas_le_sens(application):
+    """Régression centrale conservée : la ligne tracée ne touche JAMAIS au
+    sens compté — la ligne appartient à la vidéo, le sens au réglage."""
     p = PanneauReglages(Config(sens=-1))
     p.definir_ligne((640.0, 0.0, 640.0, 720.0))
     assert p.lire().sens == -1
@@ -504,65 +490,28 @@ def test_changer_de_ligne_ne_change_pas_le_sens_compté(application):
     assert p.lire().sens == -1, "le sens a bougé alors que la ligne changeait"
 
 
-def test_lire_et_afficher_restent_daccord_apres_un_changement_de_ligne(application):
-    """Ce que le menu affiche est ce que `lire()` renvoie, ligne horizontale comprise."""
-    from compteur.ligne import Ligne
+def test_le_sens_par_defaut_compte_droite_gauche(application):
+    """Non-régression du 315, côté interface.
 
-    p = PanneauReglages(Config())
-    p.definir_ligne((0.0, 400.0, 1280.0, 400.0))
-    for index, libelle in enumerate(_libelles(p)):
-        p._sens.setCurrentIndex(index)
-        sens = p.lire().sens
-        reel = Ligne((0.0, 400.0), (1280.0, 400.0), sens=sens).libelle_sens(sens)
-        assert reel == libelle, (
-            f"index {index} : le menu propose « {libelle} », le moteur compte « {reel} »"
-        )
-
-
-def test_le_sens_par_defaut_du_panneau_compte_droite_gauche(application):
-    """Non-régression du 315, au niveau de l'interface cette fois.
-
-    `Config.defauts()` porte `sens=+1`. Sur une ligne verticale tracée de bas en
-    haut — l'ordre de tracé de la vidéo de référence — ce `+1` compte de
-    DROITE À GAUCHE. Ouvrir l'application et lancer sans rien toucher doit donc
-    reproduire les 315, pas 1. Ce test échoue bruyamment si un libellé ou un
-    index a été inversé.
+    `Config.defauts()` porte `sens=+1`. Sur la verticale de la vidéo de
+    référence — tracée de bas en haut — ce `+1` compte de DROITE À GAUCHE.
+    Ouvrir et lancer sans rien toucher doit reproduire les 315, pas 1.
     """
     from compteur.config import Config as C, chemin_defaut_config
+    from compteur.ligne import Ligne
 
     p = PanneauReglages(C.depuis_fichier(chemin_defaut_config()))
     p.definir_ligne((640.0, 720.0, 640.0, 0.0))
-    from compteur.ligne import Ligne
-
     sens = p.lire().sens
     libelle = Ligne((640.0, 720.0), (640.0, 0.0), sens=sens).libelle_sens(sens)
     assert libelle == "Droite → gauche"
-    # ... et le libellé affiché par le menu est bien celui-là.
-    assert libelle in _libelles(p)
-
-
-def test_appliquer_une_config_repose_le_bon_libelle(application):
-    """Charger un profil avec `ligne` réétiquette le menu sans perdre le sens."""
-    p = PanneauReglages(Config())
-    p.appliquer(Config(sens=-1, ligne=(0.0, 400.0, 1280.0, 400.0)))
-    assert _libelles(p) == ["Haut → bas", "Bas → haut"]
-    assert p.lire().sens == -1
-    # Le libellé de -1 sur cette horizontale est bien celui affiché, pas l'autre.
-    from compteur.ligne import Ligne
-
-    attendu = Ligne((0.0, 400.0), (1280.0, 400.0), sens=-1).libelle_sens(-1)
-    assert attendu in _libelles(p)
 
 
 def test_ligne_memorisee_invalide_ne_casse_pas_le_panneau(application):
-    """Un profil écrit à la main avec deux points confondus ne doit pas planter.
-
-    Le panneau s'ouvre avant tout tracé : il a besoin d'une hypothèse pour
-    nommer les libellés, pas d'une ligne valide.
-    """
+    """Un profil écrit à la main avec deux points confondus ne doit pas
+    planter le panneau — et le sens porté reste exploitable."""
     p = PanneauReglages(Config())
     p.appliquer(Config(ligne=(10.0, 10.0, 10.0, 10.0)))
-    assert _libelles(p) == list(LIBELLES_SENS[orientation_par_defaut_sens()])
     assert p.lire().sens in (1, -1)
 
 
@@ -577,7 +526,6 @@ REGLES = (
     "survie_max",
     "seuil_matching",
     "epaisseur_bande",
-    "sens",
     "frames_hysteresis",
     "fenetre_lissage",
 )

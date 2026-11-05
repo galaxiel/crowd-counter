@@ -526,7 +526,7 @@ def test_changer_le_sens_reconstruit_la_ligne_sans_perdre_les_points(
     f = fenetre
     f.definir_ligne((300.0, 20.0), (300.0, 460.0))
     assert f.ligne.sens == 1
-    f.panneau._sens.setCurrentIndex(1)  # « Après → avant »
+    f._on_inverser_sens()  # bouton « Sens : … » de la barre de boutons
     assert f.config.sens == -1
     assert f.ligne.sens == -1
     assert f.ligne.p1 == (300.0, 20.0)

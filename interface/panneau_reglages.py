@@ -56,7 +56,6 @@ from compteur.config import (
 # Alias : le paramètre `dossiers_modeles` du constructeur masque ce nom.
 from compteur.config import dossiers_modeles as dossiers_modeles_defaut
 from compteur.ligne import (
-    LIBELLES_SENS,
     ORIENTATION_HORIZONTALE,
     ORIENTATION_VERTICALE,
     Ligne,
@@ -234,15 +233,6 @@ AIDE: dict[str, str] = {
         "Valeur conseillée : 30, assez large pour le bruit du détecteur et "
         "assez étroit pour qu'un groupe arrêté ne compte pas comme un passage."
     ),
-    "sens": (
-        "Sens de traversée — le mouvement que tu veux compter.\n\n"
-        "Ce que ça fait : ne compte que les personnes allant dans ce sens. Le "
-        "libellé suit la ligne tracée, la flèche verte montre le même sens.\n"
-        "Ce que ça change : rien si le cortège va dans l'autre sens — tu "
-        "obtiens 0 ou 1, inverse et relance dans ce cas.\n"
-        "Valeur conseillée : le sens réel du cortège. Mesuré sur la vidéo de "
-        "référence : 315 personnes de droite à gauche, 1 dans l'autre sens."
-    ),
     "frames_hysteresis": (
         "Frames d'hystérésis.\n\n"
         "Ce que ça fait : il faut avoir été du côté de départ ce nombre de "
@@ -364,7 +354,12 @@ class PanneauReglages(QWidget):
         # pose les widgets dans le silence, l'application n'a rien demandé.
         self._bloquer = True
         self._widgets: dict[str, QWidget] = {}
-        self._sens_actuel: int | None = None
+        # Le sens de traversée n'a plus de WIDGET ici (demande opérateur
+        # du 05/11/2026 : il est réglé depuis la barre de boutons de la
+        # fenêtre). Le panneau ne fait que PORTER la valeur pour que
+        # `lire()`/`appliquer()` — donc les profils — continuent de la
+        # transporter.
+        self._valeur_sens = int(config.sens) if config.sens in (1, -1) else 1
         # Les encarts sont posés dans le layout mais masqués par défaut, et
         # c'est LE bouton « Aide » qui décide de leur visibilité. Voir
         # `_poser` et `_maj_aide`.
@@ -621,14 +616,6 @@ class PanneauReglages(QWidget):
             v, "epaisseur_bande", "Épaisseur de la bande (px)", self._epaisseur
         )
 
-        self._sens = QComboBox()
-        # Les libellés dépendent de la ligne TRACÉE, pas d'un sens abstrait :
-        # « Avant → après » ne disait pas avant quoi, et l'opérateur a dû
-        # essayer les deux sens pour trouver le bon. `remplir_libelles_sens`
-        # les refait dès que la ligne change.
-        self._sens.currentIndexChanged.connect(self._emettre)
-        self._poser(v, "sens", "Sens de traversée", self._sens)
-        self._remplir_libelles_sens(c.sens, self._config.ligne)
 
         self._hysteresis = QSpinBox()
         self._hysteresis.setRange(0, 10)
@@ -795,12 +782,9 @@ class PanneauReglages(QWidget):
         c.survie_max = self._survie.value()
         c.seuil_matching = round(self._matching.value(), 3)
         c.epaisseur_bande = self._epaisseur.value()
-        # Le sens n'est plus déduit de l'INDICE mais de la valeur associée au
-        # libellé affiché : réordonner le menu pour cause de ligne horizontale
-        # ne peut plus inverser le sens compté en silence.
-        choix = [v for _, v in self.choix_sens()]
-        index = self._sens.currentIndex()
-        c.sens = choix[index] if 0 <= index < len(choix) else int(self._sens_actuel or 1)
+        # Le sens n'a plus de widget : la valeur est portée par le panneau
+        # (`_valeur_sens`, réglée par la barre de boutons ou un profil).
+        c.sens = self._valeur_sens
         c.frames_hysteresis = self._hysteresis.value()
         if hasattr(c, "fenetre_lissage"):
             setattr(c, "fenetre_lissage", self._lissage.value())
@@ -841,15 +825,11 @@ class PanneauReglages(QWidget):
         La ligne n'a pas de widget ici : elle se dessine sur l'image. Ce setter
         évite à l'appelant de devoir corriger la `Config` porteuse à la main.
 
-        Les libellés du menu de sens sont recalculés ICI et pas seulement à la
-        construction : c'est le moment où l'on passe d'une orientation supposée
-        à une orientation réelle. Le `sens` sélectionné est reporté tel quel —
-        une ligne verticale qui devient horizontale renomme les choix, elle ne
-        doit pas changer ce qui est compté.
+        Le `sens`, lui, n'a plus de widget ici — il est réglé depuis la barre
+        de boutons de la fenêtre et NE CHANGE JAMAIS par un re-tracé : la
+        ligne appartient à la vidéo, le sens au réglage de l'opérateur.
         """
         self._config = copier_config(self._config, ligne=ligne)
-        if hasattr(self, "_sens"):
-            self._remplir_libelles_sens(self._sens_actuel, ligne)
 
     def appliquer(self, config: Config) -> None:
         """Pousse une `Config` dans l'IHM, puis émet une seule fois.
@@ -879,7 +859,9 @@ class PanneauReglages(QWidget):
             self._survie.setValue(config.survie_max)
             self._matching.setValue(config.seuil_matching)
             self._epaisseur.setValue(config.epaisseur_bande)
-            self._remplir_libelles_sens(config.sens, config.ligne)
+            self._valeur_sens = (
+                int(config.sens) if config.sens in (1, -1) else 1
+            )
             self._hysteresis.setValue(config.frames_hysteresis)
             self._lissage.setValue(
                 int(getattr(config, "fenetre_lissage", FENETRE_LISSAGE_DEFAUT))
@@ -957,57 +939,16 @@ class PanneauReglages(QWidget):
             log.warning("ligne mémorisée inexploitable (%s) : %s", points, exc)
             return None
 
-    def choix_sens(self) -> list[tuple[str, int]]:
-        """Les deux choix affichés, ``(libellé, sens)``, d'après la ligne tracée.
+    def definir_sens(self, sens: int) -> None:
+        """Fixe le sens compté depuis la barre de boutons de la fenêtre.
 
-        Sans ligne tracée, l'orientation est supposée verticale — voir
-        `ORIENTATION_SANS_LIGNE`. C'est le SEUL endroit qui décide de l'ordre
-        des libellés : `lire()` et `appliquer()` passent tous deux par là, donc
-        un menu et un décompte ne peuvent pas se contredire.
+        Le panneau n'a plus de sélecteur de sens : il PORTE la valeur pour
+        que `lire()` la rende au moteur et qu'un profil l'applique. Toute
+        autre valeur que ±1 est ignorée — un profil écrit à la main ne
+        doit pas pouvoir injecter un sens invalide.
         """
-        ligne = self._ligne_de_la_config()
-        if ligne is None:
-            return [
-                (LIBELLES_SENS[orientation_par_defaut_sens()][0], 1),
-                (LIBELLES_SENS[orientation_par_defaut_sens()][1], -1),
-            ]
-        return ligne.choix_sens()
-
-    def _remplir_libelles_sens(
-        self, sens: int | None = None, ligne=None
-    ) -> None:
-        """Recalcule les libellés du menu de sens et resélectionne ``sens``.
-
-        Le `sens` PROTÉGÉ est prioritaire : changer la ligne ne doit pas changer
-        le sens compté. C'est tout l'intérêt d'un libellé explicite — l'opérateur
-        qui a réglé son sens le retrouve, écrit à l'identique, sur la vidéo
-        suivante.
-        """
-        if sens is None:
-            sens = self._sens_actuel
-        if sens is None:
-            sens = self._config.sens
-        # Passe par `_ligne_de_la_config` même quand la ligne est fournie : une
-        # ligne inexploitable (profil écrit à la main) doit retomber sur
-        # l'orientation par défaut, pas lever une ValueError depuis un setter.
-        memorisee = self._config.ligne
-        self._config = copier_config(self._config, ligne=ligne)
-        try:
-            choix = self.choix_sens()
-        finally:
-            self._config = copier_config(self._config, ligne=memorisee)
-        self._sens_actuel = int(sens) if sens in (1, -1) else 1
-        etait_bloque = self._bloquer
-        self._bloquer = True
-        try:
-            self._sens.clear()
-            for libelle, _valeur in choix:
-                self._sens.addItem(libelle)
-            self._sens.setCurrentIndex(
-                max(0, [v for _, v in choix].index(self._sens_actuel))
-            )
-        finally:
-            self._bloquer = etait_bloque
+        if sens in (1, -1):
+            self._valeur_sens = int(sens)
 
     def _mode_resolution(self) -> str:
         """Mode de résolution d'analyse actuellement sélectionné.
@@ -1099,10 +1040,6 @@ class PanneauReglages(QWidget):
     def _emettre(self, *_args) -> None:
         if self._bloquer:
             return
-        choix = [v for _, v in self.choix_sens()]
-        index = self._sens.currentIndex()
-        if 0 <= index < len(choix):
-            self._sens_actuel = choix[index]
         self._maj_etiquette_seuil()
         self._maj_activite_taille_entree()
         self.config_modifiee.emit(self.lire())
