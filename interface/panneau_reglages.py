@@ -225,13 +225,19 @@ AIDE: dict[str, str] = {
     ),
     "epaisseur_bande": (
         "Épaisseur de la bande (px).\n\n"
-        "Ce que ça fait : la zone que quelqu'un doit traverser pour être "
-        "compté. La flèche verte la dessine au milieu.\n"
-        "Ce que ça change : plus large absorbe le bruit de position mais "
-        "compte les gens arrêtés sur la ligne ; plus étroit devient exigeant "
-        "sur une foule compacte.\n"
-        "Valeur conseillée : 30, assez large pour le bruit du détecteur et "
-        "assez étroit pour qu'un groupe arrêté ne compte pas comme un passage."
+        "Ce que ça fait : c'est la zone NEUTRE autour de la ligne (la bande "
+        "jaune dessinée). Une personne doit avoir été vue plus loin que cette "
+        "demi-épaisseur, côté départ, pour que son côté de départ soit "
+        "confirmé — sinon son franchissement n'est pas compté. Ce n'est PAS "
+        "la zone de détection (plus grande, fixe).\n"
+        "Ce que ça change — mesuré sur la vidéo de référence, tout le reste "
+        "identique : 5 px compte 37, 30 px compte 32, 100 px compte 24. "
+        "Trop étroit compte aussi les gens qui APPARAISSENT presque sur la "
+        "ligne (risque de fantômes) ; trop large rate ceux qui réapparaissent "
+        "cachés puis franchissent.\n"
+        "Valeur conseillée : 30, la valeur qui a donné le décompte de "
+        "référence. Ne baisser (essayer 10) que si des gens masqués "
+        "réapparaissent juste avant la ligne."
     ),
     "frames_hysteresis": (
         "Frames d'hystérésis.\n\n"
@@ -609,7 +615,13 @@ class PanneauReglages(QWidget):
         v = QVBoxLayout(g)
 
         self._epaisseur = QSpinBox()
+        # Bornes : sous 5 px la zone neutre est plus petite que le tremblement
+        # du détecteur (plus aucune différence mesurable) ; au-delà de 100 px
+        # elle mange la bande de détection et le comptage s'effondre (24 au
+        # lieu de 32, mesuré). Pas de 5 : l'influence est lisse, régler au
+        # pixel près n'aurait aucun sens.
         self._epaisseur.setRange(5, 100)
+        self._epaisseur.setSingleStep(5)
         self._epaisseur.setValue(c.epaisseur_bande)
         self._epaisseur.valueChanged.connect(self._emettre)
         self._poser(
