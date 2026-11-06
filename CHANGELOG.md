@@ -41,6 +41,15 @@ doivent être posés dans `modeles/` (voir le README).
   ou de la verticale se colle exactement droite (recalage du second point).
   Un tracé franchement diagonal n'est pas déplacé.
 
+## [3.0.1] — 2026-11-06
+
+### Corrigé
+
+- **L'analyse en lot plantait** (`'list' object has no attribute 'ndim'`) :
+  `run` d'ONNX Runtime renvoie une LISTE de sorties, et le code de lot
+  tranchait la liste au lieu du tenseur — trouvé par l'opérateur sur la
+  première analyse réelle, corrigé et prouvé sur sa vidéo (122/122, 50 i/s).
+
 ## [3.0.0] — 2026-11-06
 
 ### Changed — CHANGEMENT DE CONTRAT D'INSTALLATION (le « majeur » du projet)
@@ -75,6 +84,15 @@ doivent être posés dans `modeles/` (voir le README).
   le dialogue — et lien vers la page des versions. Le bouton vert reste
   le geste d'installation : il n'apparaît que quand une mise à jour
   existe.
+
+## [3.0.1] — 2026-11-06
+
+### Corrigé
+
+- **L'analyse en lot plantait** (`'list' object has no attribute 'ndim'`) :
+  `run` d'ONNX Runtime renvoie une LISTE de sorties, et le code de lot
+  tranchait la liste au lieu du tenseur — trouvé par l'opérateur sur la
+  première analyse réelle, corrigé et prouvé sur sa vidéo (122/122, 50 i/s).
 
 ## [3.0.0] — 2026-11-06
 

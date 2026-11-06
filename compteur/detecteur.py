@@ -328,6 +328,8 @@ class Detecteur:
         bande puis décalage vers l'image PLEINE.
         """
         seuil = self.config.seuil_confiance
+        # `run(...)[0]` donne (5, N) en passage UNITAIRE et (B, 5, N) en
+        # lot : on remet l'axe de lot pour une seule boucle partout.
         if sortie.ndim == 2:
             # Passage unitaire : run()[0] donne (5, N) — on remet l'axe
             # de lot pour que la boucle soit la même partout.
@@ -416,9 +418,10 @@ class Detecteur:
         entrees = [self._preparer(i) for i in imgs]
         entree = np.concatenate([e[0] for e in entrees])
         forme_letterbox = entrees[0][1]
-        # PAS de [0] ici : la sortie du graphe batché est (B, 5, N) — le
-        # slicing par image ci-dessous a besoin de l'axe de lot.
-        sortie = self.session.run(None, {self.input_name: entree})
+        # `run` renvoie une LISTE de sorties (une par sortie du graphe) :
+        # on prend la première AVANT de trancher par image — un slice de
+        # liste donnerait des sous-listes, pas des tenseurs (bug 06/11).
+        sortie = self.session.run(None, {self.input_name: entree})[0]
         return [
             self._sortie_vers_detections(
                 sortie[i : i + 1], forme_letterbox, imgs[i].shape[:2],

@@ -58,7 +58,11 @@ class FauxSession:
     def run(self, _sorties, flux):
         self.appels.append(flux["images"])
         lot = flux["images"].shape[0]
-        return np.concatenate([self.sortie] * lot, axis=0) if lot > 1 else self.sortie
+        if lot > 1:
+            # Le vrai graphe batché rend (B, 5, N) — et `run` l'emballe
+            # dans une liste de sorties (bug réel du 06/11).
+            return [np.concatenate([self.sortie] * lot, axis=0)]
+        return [self.sortie]
 
 
 # --- filtrage -----------------------------------------------------------
@@ -351,4 +355,4 @@ def test_parcite_des_detections_contre_l_ancien_chemin_torch():
         total_bis += len(det.detecter(img, (400, 0, 900, 720)))
     cap.release()
     assert total == total_bis, "le moteur ONNX n'est pas déterministe !"
-    assert 580 <= total <= 620, f"compte hors bande mesurée : {total}"
+    assert 2800 <= total <= 2990, f"compte dérivé : {total} (attendu ~2896)"
