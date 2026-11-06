@@ -87,7 +87,7 @@ from compteur.detecteur import (
 )
 from compteur.ligne import LIBELLES_SENS, Ligne
 from compteur.tracker import Tracker
-from interface.overlay import dessiner
+from interface.overlay import dessiner, positions_extrapolees
 from interface.panneau_reglages import (
     PanneauReglages,
     orientation_par_defaut_sens,
@@ -506,6 +506,11 @@ class FenetrePrincipale(QMainWindow):
         #: Liste de tuples `(frame_comptage, track_id)`, bornée en nombre —
         #: voir `TAILLE_MAX_BOITES_COMPTES`.
         self._boites_comptees: list[tuple[int, int]] = []
+        #: Mémoire d'affichage des tracks : ``track_id -> (bbox_avant,
+        #: bbox_dernier)`` — les deux dernières positions RÉELLES vues. Sert
+        #: uniquement à extrapoler le dessin pendant une perte brève du
+        #: tracker (`positions_extrapolees`) ; le comptage n'y touche jamais.
+        self._positions_tracks: dict[int, tuple[tuple, tuple]] = {}
         #: Nombre d'événements du compteur déjà transformés en boîtes vertes.
         #: L'affichage peut sauter des frames (vitesse lente) : sans ce
         #: marqueur, on relirait sans cesse les mêmes événements et on
@@ -1363,6 +1368,7 @@ class FenetrePrincipale(QMainWindow):
         # précédente : les laisser afficher sur la nouvelle donnerait à
         # l'opérateur des personnes qui n'existent pas dans cette scène.
         self._boites_comptees.clear()
+        self._positions_tracks.clear()
         # Le marqueur d'événements consommés repart avec : l'historique du
         # compteur est celui de la vidéo précédente, et il sera vidé avec elle.
         self._dernier_evenement_affiche = 0
@@ -1971,6 +1977,7 @@ class FenetrePrincipale(QMainWindow):
         self._index_affiche = -1
         self._flash = 0
         self._boites_comptees.clear()
+        self._positions_tracks.clear()
         self._dernier_evenement_affiche = 0
         # « Une fois par analyse » : le compteur repart de zéro ici, donc le
         # rappel doit pouvoir se redéployer. La réouverture de session après
@@ -2255,7 +2262,14 @@ class FenetrePrincipale(QMainWindow):
         # La méthode met à jour `self._boites_comptees` (état interne) ET
         # retourne les positions courantes à dessiner. L'état interne reste
         # donc intact ; c'est le retour qui part dans l'overlay.
-        boites = self._boites_comptees_a_afficher(resultat)
+        # Positions d'affichage : réelles quand le tracker voit la personne,
+        # extrapolées pendant une perte brève, masquées au-delà (voir
+        # `positions_extrapolees`). Pur dessin : le comptage ne voit jamais
+        # cette carte.
+        positions = positions_extrapolees(
+            getattr(resultat, "tracks", None) or [], self._positions_tracks
+        )
+        boites = self._boites_comptees_a_afficher(resultat, positions)
         self.maj_compteurs(resultat.total, resultat.presents, self.frames)
         self.video.definir_image(
             dessiner(
@@ -2265,11 +2279,12 @@ class FenetrePrincipale(QMainWindow):
                 afficher_ids=False,
                 flash=flash,
                 boites_comptees=boites,
+                positions=positions,
             )
         )
 
     def _boites_comptees_a_afficher(
-        self, resultat
+        self, resultat, positions: dict | None = None
     ) -> list[tuple[int, float, float, float, float]]:
         """Met à jour l'état interne et retourne les boîtes vertes à dessiner.
 
@@ -2299,6 +2314,13 @@ class FenetrePrincipale(QMainWindow):
           rien ne purge, la liste ne peut pas croître sans fin.
         """
         suivis = {t.track_id: t for t in getattr(resultat, "tracks", None) or []}
+        if positions is None:
+            # Appel direct sans carte d'affichage (tests) : positions réelles,
+            # sans mémoire ni extrapolation.
+            positions = {
+                t.track_id: (t.bbox, t.center)
+                for t in getattr(resultat, "tracks", None) or []
+            }
 
         # Rattraper les événements non encore transformés en boîte verte.
         # L'affichage peut sauter des frames (vitesse lente) : un événement
@@ -2347,10 +2369,15 @@ class FenetrePrincipale(QMainWindow):
         vivantes.sort(key=lambda boite: boite[0], reverse=True)
         self._boites_comptees = vivantes[:TAILLE_MAX_BOITES_COMPTES]
 
-        # Les positions COURANTES, à la frame affichée.
+        # Les positions COURANTES, à la frame affichée — extrapolées pendant
+        # une perte brève par `positions`. Une track masquée (perdue au-delà
+        # de FRAMES_EXTRAPOLATION) saute ce frame mais reste dans
+        # `_boites_comptees` : si le tracker la ré-accroche, sa boîte verte
+        # réapparaît, dans la limite de durée habituelle.
         return [
-            (frame, *suivis[track_id].bbox)
+            (frame, *positions[track_id][0])
             for frame, track_id in self._boites_comptees
+            if track_id in positions
         ]
 
     # -- Compteurs et bilan ----------------------------------------------
