@@ -38,8 +38,7 @@ density estimation.
 4. **Reporting** — a summary at the end with the total, the rate, and a curve.
 
 The model only looks inside the detection band (see below), and the default
-model (`tetes-medium.pt`) is a head detector trained on SCUT-HEAD. On the
-reference video it finds 29 px heads where `tetes-medium-1280.pt` finds 21 px
+models are head detectors shipped as `.onnx` graphs (SCUT-HEAD lineage).
 ones — 38 % more real crossings.
 
 ## Running without installing anything
@@ -76,9 +75,9 @@ dist/CompteurManifestation/
 ├── CompteurManifestation.exe
 ├── _internal/                  <- DLLs and Python modules, don't touch
 └── modeles/                    <- the models; the app scans this folder
-    ├── tetes-medium.pt         <- default (head detector, 25.9 M params)
+    ├── tetes-medium.onnx       <- default (head detector)
     ├── tetes-nano.pt           <- light and fast (3.0 M params)
-    └── tetes-medium-1280.pt    <- head detector trained at 1280 px
+    └── tetes-medium-1280.onnx  <- head detector trained at 1280 px
 ```
 
 The weights are **not** inside the executable: they are parameters, not
@@ -99,12 +98,6 @@ Since v3 the engine is ONNX Runtime — no torch, no wheel index to pick:
 `requirements.txt` is enough. (On the development machine, torch and
 ultralytics remain useful only for exporting `.pt` models to `.onnx` and for
 future fine-tuning — see `docs/design/v3-onnx-proposition.md`.)
-python installer.py --dry-run --peripherique cuda # fails if there is no GPU
-```
-
-`--dry-run` installs nothing: it is the way to check what the script
-understood about your machine before letting it touch `pip`.
-
 To work on the software itself (tests, build):
 
 ```bash
@@ -113,7 +106,7 @@ python -m pip install -r requirements-dev.txt
 
 ## Where to put the models
 
-The software looks for `.pt` files in three folders, in this order:
+The software looks for `.onnx` model graphs in three folders, in this order:
 
 1. the current folder — the executable's own folder on a double-click;
 2. `modeles/`, shipped next to the executable;
@@ -121,12 +114,12 @@ The software looks for `.pt` files in three folders, in this order:
    **survives updates** (the folder shipped with the executable is replaced
    when you extract a new version; this one is not).
 
-Every `.pt` found there shows up in the *Modèle* dropdown, and loading
+Every `.onnx` found there shows up in the *Modèle* dropdown, and loading
 searches **the same folders in the same order** — a model that is listed is a
-model that loads. Drop a file into `modeles/` while the app is running: it
+model that loads. Drop a graph into `modeles/` while the app is running: it
 appears the next time you open the list, no restart needed.
 
-The *Parcourir…* button picks a `.pt`/`.onnx` from anywhere on the computer.
+The *Parcourir…* button picks an `.onnx` from anywhere on the computer.
 The field stays **editable**, so an absolute path can also be typed by hand.
 
 After a rebuild:
@@ -405,6 +398,7 @@ before pushing.
 
 - [`docs/BUILDING.md`](docs/BUILDING.md) — rebuilding the Windows executable,
   and everything about GPU / CUDA performance.
+- [`CONTRIBUTING.md`](CONTRIBUTING.md) — how to contribute (rules, tests, parity proof).
 - [`docs/USAGE.md`](docs/USAGE.md) — day-to-day use: line, direction,
   sensitivity, settings persistence, themes, updates, summary, green boxes.
 - [`docs/design/DESIGN.md`](docs/design/DESIGN.md) — the original design
