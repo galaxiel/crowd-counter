@@ -8,6 +8,19 @@ notes de release détaillées (anglais) accompagnent chaque version sur la
 Les poids `.pt` ne sont pas dans les archives : les modèles `tetes-*.pt`
 doivent être posés dans `modeles/` (voir le README).
 
+## [3.1.0] — 2026-11-06
+
+### Ajouté
+
+- **L'affichage suit les personnes pendant une perte brève du tracker.**
+  Sur une marche rapide ou une occultation (drapeau), le tracker peut perdre
+  quelqu'un une à trois frames : le point et le carré vert restaient figés à
+  l'ancienne place, sur du vide. Ils glissent maintenant dans la dernière
+  direction connue, et au-delà de trois frames ils s'effacent au lieu de
+  tricher (réapparition au ré-accrochage). Purement de l'affichage : le
+  comptage est prouvé inchangé (événements identiques frame par frame sur la
+  vidéo plongée de référence).
+
 ## [2.8.0] — 2026-11-05
 
 ### Ajouté

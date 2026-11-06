@@ -136,6 +136,14 @@ résolution auto de l'app par défaut, `--imgsz` pour forcer).
   constantes dans `compteur/config.py`.
 - Une couche d'affichage consomme l'**historique** d'événements du moteur, pas ceux de la frame
   courante : l'affichage peut sauter des frames.
+- **Affichage des tracks : décorrélation stricte d'avec le comptage (v3.1).** Le moteur expose
+  `Track.absent` (frames consécutives sans détection — informatif). L'interface seule en fait
+  quelque chose : une track perdue brièvement est DESSINÉE extrapolée (dernière vitesse connue,
+  `overlay.positions_extrapolees`, constante `FRAMES_EXTRAPOLATION = 3`), masquée au-delà — au
+  lieu du carré figé sur du vide (artefact signalé par l'opérateur, v3.0). La carte de positions
+  d'affichage ne remonte JAMAIS au moteur. Leçon de l'essai rejeté (06/11/2026, ETAT_PROJET) :
+  tout repli d'appariement côté TRACKER vole des identités dans une foule dense et double-compte
+  — ne pas « améliorer » le matching sans repasser la batterie complète.
 
 ## Le binaire gelé n'est pas la source
 
