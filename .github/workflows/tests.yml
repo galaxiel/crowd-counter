@@ -74,7 +74,11 @@ jobs:
           # onnxruntime (CPU) sur Linux, directml sur Windows. Plus de purge
           # opencv : `ultralytics` — qui tirait la variante complète — n'est
           # plus une dépendance depuis la v3.
-          pip install -r requirements.txt
+          # requirements-dev.txt apporte pytest : depuis la v3 il n'est plus
+          # tiré transitivement par rien (échec CI silencieux de v3.0.0 à
+          # v3.1.0 — « No module named pytest »), la CI rougissait à chaque
+          # push sans même exécuter un test.
+          pip install -r requirements.txt -r requirements-dev.txt
 
       - name: Suite de tests (passe rapide)
         run: python -m pytest -m "not slow" -q
