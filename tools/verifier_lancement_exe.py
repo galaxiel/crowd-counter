@@ -19,7 +19,7 @@ Trois choses qu'aucun build ne dit :
    un utilisateur ne lit pas le journal.
 
 Le dossier courant est forcé sur `dist/`, ce que fait l'explorateur Windows au
-double-clic — c'est ce qui doit permettre de trouver les `.pt`.
+double-clic — c'est ce qui doit permettre de trouver les `.onnx`.
 
 Usage :
 
@@ -54,7 +54,7 @@ def trouver_exe() -> pathlib.Path | None:
     return next((p for p in EXES_CANDATS if p.is_file()), None)
 
 #: Modèle attendu dans les dossiers livrés (valeur de config/default.json).
-MODELE_ATTENDU = "tetes-medium.pt"
+MODELE_ATTENDU = "tetes-medium.onnx"
 
 #: Préfixe du titre de la fenêtre principale (interface/app.py, qui y ajoute
 #: `compteur.VERSION`). Un bout de chaîne suffit : la vérification porte sur le
@@ -196,7 +196,7 @@ def verifier(attente: int) -> int:
     # le logiciel balaie. Le dossier de l'exécutable reste accepté : on y a
     # longtemps déposé les `.pt`, et une installation peut encore les avoir là.
     emplacements = (EXE.parent / "modeles", EXE.parent)
-    poids = sorted({p for dossier in emplacements for p in dossier.glob("*.pt")})
+    poids = sorted({p for dossier in emplacements for p in dossier.glob("*.onnx")})
     if poids:
         for p in poids:
             print(
