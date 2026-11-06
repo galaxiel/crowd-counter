@@ -51,6 +51,62 @@ COULEUR_FLASH = (80, 80, 240)
 COULEUR_COMPTEE = (60, 220, 60)
 
 
+#: Nombre de frames pendant lesquelles une track perdue continue d'être
+#: DESSINÉE à sa position extrapolée (dernière vitesse connue). Au-delà, elle
+#: est masquée : extrapoler longtemps une direction obsolète dessinerait
+#: quelqu'un qui n'y est pas. Pur affichage — le compteur ne voit jamais ces
+#: positions.
+FRAMES_EXTRAPOLATION = 3
+
+
+def positions_extrapolees(tracks, memoire: dict) -> dict:
+    """Positions d'AFFICHAGE des tracks : réelles, extrapolées, ou masquées.
+
+    ``tracks`` est la liste `Track` du résultat (le tracker y expose
+    ``absent`` : 0 = vue cette frame, n = frames sans détection). ``memoire``
+    est un dict ``track_id -> (bbox_avant, bbox_dernier)`` — les deux
+    dernières positions RÉELLES vues — muté en place ici.
+
+    Retourne ``track_id -> (bbox, center)`` pour les tracks à dessiner :
+
+    - ``absent == 0`` : la vraie position de la frame, et la mémoire est mise
+      à jour (la vitesse des prochaines pertes vient de là) ;
+    - ``1..FRAMES_EXTRAPOLATION`` : la dernière position réelle TRANSLATÉE par
+      la dernière vitesse connue × ``absent`` — le carré glisse au lieu de se
+      figer ;
+    - au-delà, ou sans historique de deux vues : la track est ABSENTE du
+      résultat — l'appelant ne la dessine pas.
+
+    Une track perdue SANS vitesse connue (apparue une frame puis perdue) est
+    aussi masquée : dessiner sa position figée est exactement l'artefact que
+    ce mécanisme retire.
+    """
+    positions: dict = {}
+    for t in tracks:
+        if t.absent == 0:
+            memoire[t.track_id] = (memoire[t.track_id][1], t.bbox)                 if t.track_id in memoire else (t.bbox, t.bbox)
+            positions[t.track_id] = (t.bbox, t.center)
+            continue
+        if t.absent > FRAMES_EXTRAPOLATION or t.track_id not in memoire:
+            continue
+        avant, dernier = memoire[t.track_id]
+        if avant is dernier:
+            continue  # une seule vue : pas de vitesse estimable
+        k = float(t.absent)
+        delta = (
+            (dernier[0] - avant[0]) * k,
+            (dernier[1] - avant[1]) * k,
+            (dernier[2] - avant[2]) * k,
+            (dernier[3] - avant[3]) * k,
+        )
+        bbox = tuple(d + v for d, v in zip(dernier, delta))
+        positions[t.track_id] = (
+            bbox,
+            ((bbox[0] + bbox[2]) / 2.0, (bbox[1] + bbox[3]) / 2.0),
+        )
+    return positions
+
+
 def dessiner(
     img: np.ndarray,
     resultat: "FrameResult",
@@ -58,6 +114,7 @@ def dessiner(
     afficher_ids: bool = True,
     flash: bool = False,
     boites_comptees: "list[tuple] | None" = None,
+    positions: "dict | None" = None,
 ) -> np.ndarray:
     """Retourne une copie annotée. ``img`` n'est jamais modifiée.
 
@@ -103,8 +160,16 @@ def dessiner(
     # s'éteignent net à la sortie de la bande (duree = BANDE_APRES_PX / vitesse).
     # L'ancienne logique de fondu a été supprimée.
 
+    # `positions` (si fournie) remplace les centres bruts : c'est la carte
+    # d'affichage de `positions_extrapolees` — une track perdue y est
+    # extrapolée ou masquée, et le dessin suit sans rien décider.
     for t in getattr(resultat, "tracks", None) or []:
-        cx, cy = int(t.center[0]), int(t.center[1])
+        if positions is not None:
+            if t.track_id not in positions:
+                continue
+            cx, cy = int(positions[t.track_id][1][0]), int(positions[t.track_id][1][1])
+        else:
+            cx, cy = int(t.center[0]), int(t.center[1])
         # `clip` sur un centre hors cadre : cv2.trace un cercle partiellement
         # dehors sans erreur, mais on borne pour rester prévisible.
         cv2.circle(sortie, (cx, cy), 4, COULEUR_TRACK, -1, lineType=cv2.LINE_AA)

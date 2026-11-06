@@ -57,6 +57,9 @@ class TrackSuivi(NamedTuple):
     center: tuple[float, float]
     age: int
     nb_hits: int
+    #: Frames consécutives sans détection (0 = vue cette frame). Exposé pour
+    #: l'affichage seul — voir `Track.absent`.
+    absent: int = 0
 
 
 def _valider(config: Config) -> None:
@@ -220,6 +223,7 @@ class _BackendIoU:
                     center=((x1 + x2) / 2.0, (y1 + y2) / 2.0),
                     age=vivante.age,
                     nb_hits=vivante.nb_hits,
+                    absent=vivante.absent,
                 )
             )
         return sorties
@@ -277,6 +281,7 @@ class Tracker:
                     bbox=t.bbox,
                     age=t.age,
                     confirmed=True,
+                    absent=t.absent,
                 )
             )
         return tracks

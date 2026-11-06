@@ -48,6 +48,11 @@ class Track:
     bbox: tuple[float, float, float, float]
     age: int
     confirmed: bool
+    #: Frames consécutives sans détection (0 = vue cette frame). Purement
+    #: informatif pour l'AFFICHAGE : pendant une perte brève, la position
+    #: exposée est la dernière VUE — l'interface l'extrapole ou masque, le
+    #: comptage n'en tient jamais compte.
+    absent: int = 0
 
 
 @dataclass
