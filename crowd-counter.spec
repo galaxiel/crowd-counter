@@ -114,38 +114,8 @@ RACINE = Path(SPECPATH)
 if str(RACINE) not in sys.path:
     sys.path.insert(0, str(RACINE))
 
-#: `uv.exe`, l'outil qui installe torch au premier lancement. Cherché dans
-#: trois endroits, par ordre de préférence :
-#:
-#: 1. le dépôt lui-même (`uv.exe` à la racine) — c'est là qu'on le met pour
-#:    que le build soit reproductible et qu'aucune installation globale ne
-#:    puisse rendre le build dépendant d'un poste ;
-#: 2. le répertoire des outils utilisateur (`%USERPROFILE%\.local\bin`), où
-#:    l'installeur uv le pose ;
-#: 3. le `PATH`.
-#:
-#: **S'il n'est trouvé nulle part, le build s'arrête ici.** Embedder un `uv`
-#: pris dans le `PATH` sans le dire produirait un exécutable qui fonctionne
-#: chez le développeur et échoue chez l'utilisateur — le défaut exact que la
-#: v2 doit éviter. Mieux vaut un build qui échoue bruyamment.
-def _trouver_uv():
-    candidats = [
-        RACINE / "uv.exe",
-        pathlib.Path(os.environ.get("USERPROFILE", "")) / ".local" / "bin" / "uv.exe",
-    ]
-    trouve = shutil.which("uv")
-    if trouve:
-        candidats.append(pathlib.Path(trouve))
-    for candidat in candidats:
-        if candidat.is_file():
-            return candidat
-    raise SystemExit(
-        "uv.exe est introuvable. Installez uv (https://astral.sh/uv), ou "
-        "copiez uv.exe a la racine du depot, puis relancez le build."
-    )
-
-
-UV_EXE = _trouver_uv()
+#: (v3 : plus d'`uv.exe` — plus de torch à installer au premier
+#: lancement. ONNX Runtime est embarqué dans l'exécutable.)
 
 #: Icône de l'application — gravée dans l'exe (Explorateur, barre des
 #: tâches) ET embarquée comme donnée pour l'icône de fenêtre à l'exécution
@@ -217,9 +187,6 @@ a = Analysis(
         (str(CHEMIN_ICONE), "resources"),
         # La flèche des listes déroulantes (QSS ::down-arrow, style.py).
         (str(RACINE / "resources" / "fleche-bas.png"), "resources"),
-        # `uv.exe` part dans `_internal/`, donc dans `sys._MEIPASS`. C'est le
-        # premier endroit que `compteur.telechargement.uv_exe` cherche.
-        (str(UV_EXE), "."),
     ],
     # torch et torchvision sont VOLONTAIREMENT absents d'`hiddenimports`,
     # contrairement à ce que faisait le spec v1. Les lister ici alors qu'ils sont
@@ -227,37 +194,21 @@ a = Analysis(
     # fait tenter à PyInstaller de les emballer quand même. Ils sont
     # chargés depuis le cache à l'exécution par `compteur.telechargement`.
     hiddenimports=[
-        # -- Détection : le cœur du logiciel. `ultralytics` importe torch au
-        #    niveau de son propre `__init__` : ce n'est analysé qu'AU
-        #    moment de l'inférence, donc torch a pu être posé sur
-        #    `sys.path` entre-temps. Pas de problème en pratique — et de toute
-        #    façon PyInstaller ne suit pas les imports dynamiques d'un
-        #    module déjà exclu.
-        "ultralytics",
-        "ultralytics.yolo",
-        "ultralytics.nn.autobackend",
-        "ultralytics.nn.tasks",
-        "ultralytics.utils.nms",
-        "ultralytics.utils.plotting",
-        "ultralytics.engine.predictor",
-        "ultralytics.data.augment",
-        "ultralytics.cfg",
         # -- Interface.
         "PySide6.QtCore",
         "PySide6.QtGui",
         "PySide6.QtWidgets",
-        # -- Vidéo / numérique (importés par opencv et ultralytics).
+        # -- Vidéo / numérique.
         "cv2",
+        # -- Moteur v3 : ONNX Runtime. Le hook contrib collecte le paquet ;
+        #    DirectML.dll (via onnxruntime-directml) doit être vérifié sur
     ],
     # `hooks-v2/` prime sur `pyinstaller_hooks_contrib/stdhooks/`, comme
     # expliqué dans le docstring : c'est ce qui empêche le hook torch
     # officiel de recollecter 3,8 Go de DLL CUDA.
     hookspath=[str(RACINE / "hooks-v2")],
     hooksconfig={},
-    # Même sonde de diagnostic que la v1 (`tools/injection_probe.py`) : sans
-    # effet en usage normal, mais c'est elle qui prouve que
-    # `config/default.json` est bien lu depuis l'exécutable gelé.
-    runtime_hooks=[str(RACINE / "tools" / "injection_probe.py")],
+    runtime_hooks=[],
     excludes=[
         # -- Les trois modules torch. Le spec v1, lui, n'en listait aucun et
         #    portait tout le poids. Le retirer de
@@ -266,6 +217,9 @@ a = Analysis(
         "torch",
         "torchvision",
         "torchaudio",
+        # -- v3 : plus aucune dépendance à ultralytics — l'exclure garantit
+        #    qu'un import résiduel ne la recollecterait pas en silence.
+        "ultralytics",
         # -- Modules Qt JAMAIS importés par ce logiciel, embarqués parce que
         #    PySide6 les déclare comme dépendances de QtWidgets. Mesuré : 38 Mo
         #    de DLL et de `.pyd` qui ne servent à rien ici.

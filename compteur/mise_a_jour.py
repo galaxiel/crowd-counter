@@ -45,7 +45,7 @@ import sys
 import urllib.request
 import zipfile
 
-from .telechargement import Annulation, ErreurDisque, ErreurReseau
+from .erreurs import Annulation, ErreurDisque, ErreurReseau
 
 log = logging.getLogger(__name__)
 
@@ -352,7 +352,7 @@ def migrer_donnees(ancienne: pathlib.Path, nouvelle: pathlib.Path) -> list[str]:
     # Poids déposés par l'opérateur (non livrés par la nouvelle release).
     modeles_anciens = ancienne / "modeles"
     if modeles_anciens.is_dir():
-        for source in modeles_anciens.glob("*.pt"):
+        for source in modeles_anciens.glob("*.onnx"):
             cible = nouvelle / "modeles" / source.name
             if not cible.exists():
                 try:

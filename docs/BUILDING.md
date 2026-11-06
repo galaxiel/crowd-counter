@@ -6,46 +6,29 @@ CUDA performance. To run the application from source instead, see the
 
 ## Building the executable
 
-**Build from a clean virtual environment.** This is not advice — it is the
-difference between a lean executable and a bloated one.
-
-Ultralytics imports its optional inference backends conditionally. If they are
-installed, PyInstaller bundles them: TensorRT (1.5 GB), TensorFlow (1.1 GB),
-ONNX Runtime (741 MB), xformers (413 MB) and bitsandbytes (213 MB). **None of
-them is used** — this project only ever runs PyTorch. Excluding them from the
-spec does not work: PyInstaller crashes while reading one of their hooks. The
-reliable approach is to make them unavailable in the first place — a virtual
-environment that never had them.
+**v3 — the build is now trivial.** The engine is ONNX Runtime: no torch, no
+ultralytics, no `uv.exe`, no first-launch download. Any clean Python 3.11
+environment works — the only GPU layer is DirectML, which ships inside the
+`onnxruntime-directml` package.
 
 ```bash
-# 1. clean environment, nothing else in it
+# 1. clean environment (or simply use requirements-dev.txt on the dev box)
 python -m venv build-env
+build-env\Scripts\python -m pip install -r requirements-dev.txt
 
-# 2. torch CUDA + matching torchvision MUST come from the same index
-build-env\Scripts\python -m pip install torch==2.14.1+cu126 torchvision==0.29.1+cu126 ^
-    --index-url https://download.pytorch.org/whl/cu126
-
-# 3. the rest — from PyPI, never from the torch index
-build-env\Scripts\python -m pip install ultralytics PySide6 pyinstaller pytest
-
-# 3bis. OpenCV HEADLESS, not opencv-python: the application never shows an
-# OpenCV window (the UI is PySide6) — the headless build is the right
-# package for this. NOTE on weight: measured 2026-10-30, the saving is only
-# ~0.5 MB (dist 293.7 -> 293.2 MB), because OpenCV 5.x no longer ships Qt
-# DLLs inside its Windows wheel (4.x did; that's where the old "~80 MB"
-# estimate came from).
-# TRAP: ultralytics declares opencv-python as a dependency, so pip installs
-# the FULL build even when the headless one is requested, and both packages
-# write into the same site-packages/cv2 folder. Purge BOTH, then install
-# the headless build alone — that is the only deterministic way to end up
-# with a headless-only cv2:
-build-env\Scripts\python -m pip uninstall -y opencv-python opencv-python-headless
-build-env\Scripts\python -m pip install opencv-python-headless
-
-# 4. build — note the workpath
+# 2. build — note the workpath
 build-env\Scripts\python -m PyInstaller --clean --workpath build/v2 crowd-counter.spec
 build-env\Scripts\python tools/copier_modeles.py
 ```
+
+`copier_modeles.py` copies the shipped `.onnx` graphs (`tetes-medium`,
+`tetes-nano`, `tetes-medium-1280`) into the dist. The `.pt` source weights
+are NOT shipped and NOT executable in v3 — they live on the development
+machine only, for re-export and fine-tuning.
+
+The old v2 sequence (torch CUDA wheels from a dedicated index, ultralytics,
+`uv.exe`, the opencv purge dance) is gone with the torch engine; its history
+lives in git and in `docs/design/v3-onnx-proposition.md`.
 
 The spec also embeds two things at build time, both loud-fail if missing:
 the **application icon** (`resources/crowd-counter.ico` — title bar, taskbar,
@@ -54,17 +37,12 @@ Details, **derived from `compteur.VERSION`** on every build — the single
 source of truth, so the exe cannot lie about its version and every update
 carries its own number automatically.
 
-**torch and torchvision must come from the same index.** A CPU-only
-torchvision next to a CUDA torch crashes `torchvision::nms` on CUDA. This is
-the single most common packaging mistake here.
-
-Result: `dist/CompteurManifestation/` — ~290 MB without the weights
+Result: `dist/CompteurManifestation/` — ~340 MB with the ONNX graphs
 (`copier_modeles.py` places them in `dist/CompteurManifestation/modeles/`,
-the subfolder the application scans and the release zip ships).
-(~360–400 MB with them). torch is NOT bundled; it is downloaded into
-`%LOCALAPPDATA%\CompteurManifestation\` on first launch. The `--workpath
-build/v2` keeps PyInstaller's intermediate `.toc` files in a workpath of their
-own — sharing it with other builds mixes stale state in.
+the subfolder the application scans and the release zip ships). Nothing is
+downloaded at first launch. The `--workpath build/v2` keeps PyInstaller's
+intermediate `.toc` files in a workpath of their own — sharing it with other
+builds mixes stale state in.
 
 `copier_modeles.py` also copies the shipped settings profiles
 (`config/profils/*.json` from the repository) into
@@ -178,28 +156,32 @@ useless to anyone doing `sha256sum -c` on their own download. Run it from
 
 ## Performance and GPU
 
-**torch must be installed as the CUDA version.** On this machine:
+The engine is ONNX Runtime. On Windows the GPU layer is **DirectML**, which
+drives NVIDIA, AMD and Intel cards alike — the software no longer requires
+an NVIDIA card. Measured on this machine (RTX 4070 SUPER, 1080p video
+analysed at 1280):
 
-```
-torch 2.14.1+cu126
-torchvision 0.29.1+cu126
-```
+| Path | Throughput |
+|---|---|
+| torch CUDA (v2, historical) | ~58 img/s |
+| **ONNX Runtime DirectML (v3)** | **~51 img/s** |
+| ONNX Runtime CPU (fallback) | works, much slower |
 
-That is what `installer.py` does when it detects an NVIDIA card.
+The full comparison — parity proof, both paths, the decision rule — lives in
+[`docs/design/v3-onnx-proposition.md`](design/v3-onnx-proposition.md).
 
-### How much it changes
+## How much it changes
 
-Measured on this machine, on the reference video:
+Measured on the reference video (v2 numbers, kept for the record):
 
 | Device | Throughput | 4-minute video |
 |---|---|---|
-| CUDA (RTX 4070 SUPER) | ~27 img/s | ~9 min |
-| CPU | ~7 img/s | ~35 min |
+| torch CUDA (RTX 4070 SUPER) | ~27 img/s | ~9 min |
+| CPU torch | ~7 img/s | ~35 min |
 
-A CPU torch works, but the counter becomes unusable live, and long scenes
-will take hours. That is why the first launch downloads the CUDA wheel
-(~2.4 GB): `torch_cuda.dll` alone weighs 1 GB, `cublasLt` 500 MB, cuDNN over
-1 GB.
+In v3 the same GPU through DirectML measured ~51 img/s on the plongée video
+(see the proposition document). A CPU-only machine runs, just slower — and
+it runs at all, which the v2 CUDA-only wheel did not allow on AMD/Intel.
 
 ### Choosing where the compute happens
 
@@ -207,8 +189,8 @@ The *Calcul sur* setting, in the *Périphérique de calcul* panel:
 
 | Choice | Effect |
 |---|---|
-| **Automatic** (default) | CUDA if the machine has one, CPU otherwise |
-| **NVIDIA GPU (CUDA)** | The GPU is required. Without a card, the analysis **falls back to CPU with a message** — crashing in the field costs more than a slow run you can at least watch |
+| **Automatic** (default) | GPU (DirectML) if the machine has one, CPU otherwise |
+| **GPU required** (réglage « cuda », historique) | A GPU is required. Without one, the analysis **falls back to CPU with a message** — crashing in the field costs more than a slow run you can at least watch |
 | **CPU only** | The processor is required even with a GPU present. This is the remedy when the GPU crashes on a particular scene |
 
 This choice does **not** change the count: the same scene is analysed the same
@@ -223,16 +205,18 @@ Under PyInstaller, `nvidia-smi` only queries the driver: it ignores
 `CUDA_VISIBLE_DEVICES`, which is a Linux convention. To verify the CPU branch
 on a machine that does have a card, the installer exposes `--sans-gpu`.
 
-### AMD is not supported
+### AMD and Intel are supported in v3
 
-A deliberate choice: **a single executable, built with CUDA**. A CPU-only
-torch wheel weighs ~200 MB against ~3 GB for CUDA; shipping both would double
-the size of the `dist/` folder for a use case that is not ours (an AMD card in
-2026 is rare on the demonstration-camera market this targets). The program
-therefore runs on AMD in CPU mode, at ~7 img/s — usable for a short video, not
-for a whole demonstration.
+The v2 constraint ("a single executable, built with CUDA — AMD not
+supported") is gone with the torch engine: DirectML drives NVIDIA, AMD and
+Intel cards alike, and the CPU fallback covers the rest.
 
-### If the GPU is not being used
+The v2 PyInstaller traps around `hooks-v2/hook-torchvision.py` (torchvision's
+`_C.stable` extension, CUDA DLLs loaded by `torch.ops.load_library()`) died
+with the torch engine; the hooks stay in the repository as belt-and-braces
+excludes.
+
+## If the GPU is not being used
 
 The application reports it in the status bar and in the console, and analyses
 anyway on the CPU, very slowly.

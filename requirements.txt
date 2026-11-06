@@ -1,9 +1,19 @@
-torch>=2.4
-ultralytics>=8.3
-# supervision n'est PLUS une dépendance : le tracking est associatif par IoU
-# (compteur/tracker.py), écrit dans ce dépôt. Vérifié : aucun `import
-# supervision` dans compteur/ ni interface/ — seule une mention en commentaire
-# subsiste, dans le nom historique `_BackendSupervision`.
+# Dépendances d'exécution — v3 (moteur ONNX Runtime).
+#
+# CHANGEMENT DE CONTRAT v3 : plus de torch, plus d'ultralytics, plus de
+# téléchargement de 2,4 Go au premier lancement. L'inférence passe par
+# ONNX Runtime ; le prétraitement et le NMS (ex-travail d'ultralytics)
+# sont vendores dans compteur/detecteur.py.
+#
+# ONNX Runtime, en deux habillages selon l'OS (même module `onnxruntime`) :
+# - Windows : `onnxruntime-directml` — la couche GPU de Windows (DirectML)
+#   pilote NVIDIA, AMD ET Intel ; mesuré sur RTX 4070 : 51 i/s (88 % de
+#   torch, voir docs/design/v3-onnx-proposition.md) ;
+# - ailleurs (CI Linux) : `onnxruntime` CPU — la suite ne fait aucune
+#   inférence, seul l'import compte.
+onnxruntime-directml>=1.20; sys_platform == 'win32'
+onnxruntime>=1.20; sys_platform != 'win32'
+
 # `opencv-python-headless` et non `opencv-python` : le logiciel n'affiche
 # JAMAIS rien avec OpenCV (l'interface est PySide6 ; OpenCV ne fait que lire
 # la vidéo, rogner la bande et écrire les vidéos de test). C'est le bon
@@ -12,16 +22,12 @@ ultralytics>=8.3
 # plus de DLL Qt dans sa wheel Windows (c'était le cas en 4.x, d'où
 # l'estimation « ~80 Mo » devenue fausse).
 #
-# PIÈGE CONNU : `ultralytics` déclare `opencv-python` en dépendance — pip
-# installe donc la variante complète EN PLUS de la headless, et les deux
-# paquets écrivent dans le même dossier `cv2`. Il faut purger puis réinstaller
-# (voir docs/BUILDING.md étape 3bis, et `installer.py` qui le fait tout seul) :
-#     pip uninstall -y opencv-python opencv-python-headless
-#     pip install opencv-python-headless
+# PIÈGE CONNU (résolu en v3) : `ultralytics` — supprimée — déclarait
+# `opencv-python` en dépendance, et pip installait la variante complète EN
+# PLUS de la headless. La séquence de purge n'est plus nécessaire, elle
+# reste documentée dans docs/BUILDING.md pour l'historique.
 opencv-python-headless>=4.10
 numpy>=1.26
 Pillow>=10.4
 PySide6>=6.7
 scipy>=1.13
-pytest>=8.0
-pyinstaller>=6.10

@@ -387,18 +387,18 @@ def test_signal_emis_quand_la_config_change(application):
 def test_lister_modeles_trouve_les_fichiers_presents(tmp_path):
     # Nom VOLONTAIREMENT différent du repli : avec « tetes-medium.pt » ici,
     # le test passerait même si le balayage du dossier ne trouvait rien.
-    (tmp_path / "mon-modele.pt").write_bytes(b"")
+    (tmp_path / "mon-modele.onnx").write_bytes(b"")
     (tmp_path / "notes.txt").write_text("ignoré", encoding="utf-8")
-    assert lister_modeles([tmp_path]) == ["mon-modele.pt"]
+    assert lister_modeles([tmp_path]) == ["mon-modele.onnx"]
 
 
 def test_lister_modeles_dossier_vide_ne_crashe_pas(tmp_path):
     """Aucun .pt sur le disque : on renvoie la liste de repli, sans exception."""
-    assert lister_modeles([tmp_path]) == ["tetes-medium.pt"]
+    assert lister_modeles([tmp_path]) == ["tetes-medium.onnx"]
 
 
 def test_lister_modeles_dossier_absent_ne_crashe_pas(tmp_path):
-    assert lister_modeles([tmp_path / "nulle_part"]) == ["tetes-medium.pt"]
+    assert lister_modeles([tmp_path / "nulle_part"]) == ["tetes-medium.onnx"]
 
 
 def test_panneau_ne_crashe_pas_sans_fichier_de_modele(application, tmp_path, monkeypatch):
@@ -412,7 +412,7 @@ def test_panneau_ne_crashe_pas_sans_fichier_de_modele(application, tmp_path, mon
     vide.mkdir()
     monkeypatch.chdir(tmp_path)
     p = PanneauReglages(Config(), dossiers_modeles=[vide])
-    assert p.modeles_proposes() == ["tetes-medium.pt"]
+    assert p.modeles_proposes() == ["tetes-medium.onnx"]
     # La Config fournie reste la source de vérité : le panneau ne substitue
     # pas un modèle à l'utilisateur sans qu'il le demande.
     assert p.lire().modele == Config().modele
@@ -440,10 +440,10 @@ def test_modele_present_est_propose(application, tmp_path, monkeypatch):
 
 def test_le_repertoire_courant_est_par_default(application, monkeypatch, tmp_path):
     """Sans argument, le panneau cherche les .pt du répertoire courant."""
-    (tmp_path / "nano.pt").write_bytes(b"")
+    (tmp_path / "nano.onnx").write_bytes(b"")
     monkeypatch.chdir(tmp_path)
-    assert lister_modeles() == ["nano.pt"]
-    assert PanneauReglages(Config(modele="nano.pt")).lire().modele == "nano.pt"
+    assert lister_modeles() == ["nano.onnx"]
+    assert PanneauReglages(Config(modele="nano.onnx")).lire().modele == "nano.onnx"
 
 
 # -- Sens : valeur PORTÉE par le panneau, réglée depuis la barre ---------
@@ -792,10 +792,10 @@ def test_parcourir_annule_laisse_le_champ_intact(application, monkeypatch, tmp_p
 def test_relecture_decouvre_un_modele_ajoute(application, tmp_path):
     """Un .pt déposé APRÈS l'ouverture du panneau doit apparaître sans redémarrer."""
     p = PanneauReglages(Config(), dossiers_modeles=[tmp_path])
-    assert "nouveau.pt" not in p.modeles_proposes()
-    (tmp_path / "nouveau.pt").write_bytes(b"poids")
+    assert "nouveau.onnx" not in p.modeles_proposes()
+    (tmp_path / "nouveau.onnx").write_bytes(b"poids")
     p.rafraichir_choix_modeles()
-    assert "nouveau.pt" in p.modeles_proposes()
+    assert "nouveau.onnx" in p.modeles_proposes()
 
 
 def test_relecture_conserve_le_choix_courant(application, tmp_path):

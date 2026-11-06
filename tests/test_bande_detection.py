@@ -53,16 +53,46 @@ def ligne_bandee(x=640.0, sens=1):
 
 
 class ModeleEspion:
-    """Faux modèle : note la forme de l'image reçue, renvoie une boîte fixe."""
+    """Fausse session ONNX : renvoie une boîte fixe EN COORDONNÉES LETTERBOX.
 
-    def __init__(self, boite=(10.0, 20.0, 40.0, 60.0)):
+    La boîte est donnée en coordonnées de la COUPE attendue ; le forward
+    de `_letterbox` est replicé ici (ratio + padding centré avec son
+    arrondi asymétrique) pour que l'aller-retour du détecteur soit une
+    identité EXACTE — un faux approximatif testerait le fake, pas le
+    décalage de bande.
+    """
+
+    def __init__(self, boite=(10.0, 20.0, 40.0, 60.0), forme_coupe=(720, 500)):
         self.forme_recue = None
         self.boite = boite
-        self.nom = {}
+        self.forme_coupe = forme_coupe
 
-    def __call__(self, img, **kw):
-        self.forme_recue = img.shape
+    def get_inputs(self):
+        class Entree:
+            name = "images"
+
+        return [Entree()]
+
+    def run(self, _sorties, flux):
+        x = flux["images"]
+        self.forme_recue = (x.shape[2], x.shape[3], 3)
+        taille = 640
+        h, w = self.forme_coupe
+        r = min(taille / h, taille / w)
+        nh, nw = round(h * r), round(w * r)
+        dw, dh = (taille - nw) % 32, (taille - nh) % 32
+        gauche = round((dw / 2) - 0.1)
+        haut = round((dh / 2) - 0.1)
         x1, y1, x2, y2 = self.boite
+        bx1, by1 = x1 * r + gauche, y1 * r + haut
+        bx2, by2 = x2 * r + gauche, y2 * r + haut
+        out = np.zeros((x.shape[0], 5, 1), dtype=np.float32)
+        out[:, 0, 0] = (bx1 + bx2) / 2
+        out[:, 1, 0] = (by1 + by2) / 2
+        out[:, 2, 0] = bx2 - bx1
+        out[:, 3, 0] = by2 - by1
+        out[:, 4, 0] = 0.9
+        return out
 
         class Boites:
             xyxy = np.array([[x1, y1, x2, y2]], dtype=np.float32)
@@ -89,7 +119,7 @@ def test_la_bande_rogne_l_image_et_les_coordonnees_reviennent_justes():
     C'est la famille de bugs la plus coûteuse du projet : invisible à l'œil,
     fausse au chiffrage.
     """
-    modele = ModeleEspion()
+    modele = ModeleEspion(forme_coupe=(HAUTEUR, BANDE_AVANT_PX + BANDE_APRES_PX))
     detecteur = Detecteur(modele, Config())
     lgn = ligne_bandee(x=640.0)
 
@@ -103,7 +133,13 @@ def test_la_bande_rogne_l_image_et_les_coordonnees_reviennent_justes():
     detections = detecteur.detecter(image(), rect)
 
     # Le modèle a bien vu la COUPE, pas l'image entière : c'est le rognage.
-    assert modele.forme_recue == (HAUTEUR, BANDE_AVANT_PX + BANDE_APRES_PX, 3), (
+    # En v3 la session reçoit le TENSEUR letterboxé : la forme attendue est
+    # celle de la letterbox de la COUPE (500x720 -> 448x640), pas de l'image.
+    from compteur.detecteur import _letterbox  # noqa: PLC0415
+
+    coupe = image()[0:HAUTEUR, 640 - 250 : 640 + 250]
+    attendu = _letterbox(coupe, Config().taille_entree)[0].shape
+    assert modele.forme_recue == attendu, (
         f"le modèle a reçu {modele.forme_recue}, la bande n'a pas été appliquée"
     )
     # Et la boîte est revenue dans le repère de l'image pleine : le modèle a
@@ -111,8 +147,15 @@ def test_la_bande_rogne_l_image_et_les_coordonnees_reviennent_justes():
     # c'est le BORD de la bande (390) qui sert de décalage, pas le centre de
     # l'image.
     d = detections[0]
-    assert (d.x1, d.x2) == (400.0, 430.0), "coordonnées x non revenues"
-    assert (d.y1, d.y2) == (20.0, 60.0), "coordonnées y non revenues"
+    # La fausse session réplique le forward letterbox EXACTEMENT : le
+    # retour du détecteur doit donc être la boîte native au pixel près —
+    # rognage ET décalage prouvés d'un coup.
+    assert (d.x1, d.x2) == (pytest.approx(400.0, abs=1), pytest.approx(430.0, abs=1)), (
+        "coordonnées x non revenues"
+    )
+    assert (d.y1, d.y2) == (pytest.approx(20.0, abs=1), pytest.approx(60.0, abs=1)), (
+        "coordonnées y non revenues"
+    )
 
 
 def test_sans_bande_le_modele_voit_toute_l_image():
@@ -121,10 +164,13 @@ def test_sans_bande_le_modele_voit_toute_l_image():
     Sans ce contre-test, une bande qui ne serait jamais appliquée passerait le
     test précédent — il ne verrait qu'un chemin de code qui fonctionne.
     """
-    modele = ModeleEspion()
+    modele = ModeleEspion(forme_coupe=(HAUTEUR, BANDE_AVANT_PX + BANDE_APRES_PX))
     detecteur = Detecteur(modele, Config())
     detecteur.detecter(image(), None)
-    assert modele.forme_recue == (HAUTEUR, LARGEUR, 3)
+    from compteur.detecteur import _letterbox  # noqa: PLC0415
+
+    attendu = _letterbox(image(), Config().taille_entree)[0].shape
+    assert modele.forme_recue == attendu
 
 
 # -- 2. L'abandon après la ligne ne change pas le décompte ----------------

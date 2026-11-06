@@ -4,6 +4,20 @@
 les conventions de travail et l'interpréteur — ce fichier ne les répète pas,
 il les complète.
 
+## v3.0.0 — MOTEUR ONNX (06/11/2026, LIVRÉE)
+
+Le « majeur » au sens du versionnement du projet : **le contrat
+d'installation change**. Proposition, spike, règle de décision et résultats
+mesurés : [`docs/design/v3-onnx-proposition.md`](design/v3-onnx-proposition.md).
+
+| Apport | Détail |
+|---|---|
+| Moteur ONNX Runtime | Plus de torch, plus d'ultralytics, plus de téléchargement de 2,4 Go. Modèles livrés en `.onnx` (export depuis les `.pt` du poste de dev). |
+| DirectML = toutes cartes | NVIDIA, AMD, Intel — la v2 exigeait NVIDIA. Mesuré 51,2 i/s sur 4070 (88 % de torch). |
+| Parité prouvée | 2 896/2 896 détections jumelées (60 frames) ; comptes à ±1 sur les 4 vidéos terrain. Deux pièges : le graphe attend du RGB, le NMS d'ultralytics ne se réimplémente pas. |
+| Installateur simplifié | `main.py` sans venv ni écran d'installation ; `telechargement.py` et `demarrage.py` supprimés ; `installer.py` réduit à un `pip install`. |
+| Tests | 644 verts (les ~65 tests du téléchargement torch partis avec la machinerie) ; test de déterminisme du moteur ajouté. |
+
 ## v2.10 — CANDIDATS (propositions opérateur, 05/11/2026)
 
 Règle du dépôt inchangée : un candidat ne part qu'après validation explicite.

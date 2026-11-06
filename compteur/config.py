@@ -187,7 +187,7 @@ def dossier_modeles_utilisateur() -> pathlib.Path:
     r"""Dossier de modèles personnels, qui SURVIT aux mises à jour.
 
     `%LOCALAPPDATA%\CompteurManifestation\modeles` — même parent que le cache
-    d'installation (voir `compteur.telechargement.dossier_cache`, dont un test
+    d'installation (voir `compteur.erreurs.dossier_cache`, dont un test
     vérifie la cohérence). Le dossier livré avec l'exécutable est remplacé à
     chaque nouvelle version extraite ; celui-ci, non : c'est donc ici qu'on
     range un modèle qu'on ne veut pas recopier après chaque mise à jour.
@@ -331,7 +331,7 @@ class Config:
     # tetes-medium.pt : modèle de tête entraîné sur SCUT-HEAD (foule dense).
     # Sur la vidéo de référence il donne des têtes de 29 px contre 21 px pour
     # tetes-medium-1280.pt, soit 38 % de marches réelles en plus.
-    modele: str = "tetes-medium.pt"
+    modele: str = "tetes-medium.onnx"
     seuil_confiance: float = 0.25
     # Une tête détectée sur cette vidéo fait 20-29 px : un seuil de 20 px
     # filtrerait la moitié des détections. 3 px ne filtre que le bruit.

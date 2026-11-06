@@ -61,12 +61,10 @@ disk.
 
 ### Why a folder and not a single `.exe`
 
-PyInstaller can bundle everything into one file ("onefile"). With torch CUDA
-this mode **does not work**: the archive format uses signed 32-bit offsets,
-and the CUDA DLLs alone weigh 3.8 GB. The binary builds without error, then
-**crashes at launch**, exiting without a message. The details are in
-`crowd-counter.spec`; the workaround (for a CPU install that fits under 2 GB)
-is `COMPTEUR_ONEFILE=1`.
+The application ships as a folder (`CompteurManifestation/` with the exe,
+`_internal/` and `modeles/`) — the layout the built-in updater knows how to
+swap. (In v2, a single-file build was impossible anyway: the torch CUDA DLLs
+broke the archive format. That constraint died with the torch engine.)
 
 The folder mode has a direct advantage for this software: no decompressing
 3 GB on every launch.
@@ -97,17 +95,10 @@ python installer.py
 python main.py
 ```
 
-`installer.py` detects the graphics card and installs the matching version of
-torch. **Do not use `pip install -r requirements.txt`** for this step: torch
-is published in two wheel families, CPU and CUDA, and the package named `torch`
-on PyPI does not say which one you get — it is the install that looks correct
-and runs at 7 img/s.
-
-The script checks itself without installing anything:
-
-```bash
-python installer.py --dry-run                    # shows the chosen branch
-python installer.py --dry-run --sans-gpu         # verifies the CPU branch
+Since v3 the engine is ONNX Runtime — no torch, no wheel index to pick:
+`requirements.txt` is enough. (On the development machine, torch and
+ultralytics remain useful only for exporting `.pt` models to `.onnx` and for
+future fine-tuning — see `docs/design/v3-onnx-proposition.md`.)
 python installer.py --dry-run --peripherique cuda # fails if there is no GPU
 ```
 
@@ -157,23 +148,23 @@ Measured on the reference video, 4-minute scene:
 | CUDA (RTX 4070 SUPER) | ~27 img/s | ~9 min |
 | CPU | ~7 img/s | ~35 min |
 
-AMD cards run in CPU mode — a deliberate trade-off. The full story (device
-choice in the app, why the first launch downloads ~2.4 GB of CUDA, the
-PyInstaller packaging traps) is in
-[`docs/BUILDING.md`](docs/BUILDING.md#performance-and-gpu).
+Since v3 the GPU layer is DirectML: NVIDIA, AMD and Intel cards are all
+accelerated. The full story (engine choice, parity proof against the v2
+torch path) is in
+[`docs/BUILDING.md`](docs/BUILDING.md#performance-and-gpu) and
+[`docs/design/v3-onnx-proposition.md`](docs/design/v3-onnx-proposition.md).
 
 ## What the download looks like
 
-The executable does not contain PyTorch; it fetches the right version on first
-launch and caches it in `%LOCALAPPDATA%\CompteurManifestation\`. Later launches
-start normally.
+Everything is in the archive since v3 — nothing is downloaded on first
+launch.
 
 | | |
 |---|---|
-| Download | **~224 MB** |
-| Needs internet | yes, on first launch |
+| Download | **~380 MB** |
+| Needs internet | only for updates |
 | Administrator rights | no |
-| First launch | downloads PyTorch (~2.4 GB CUDA, ~200 MB CPU) |
+| First launch | nothing to download — it starts |
 | Windows version | 10 or later |
 
 Download it from the [releases page](../../releases).
@@ -186,8 +177,8 @@ Download it from the [releases page](../../releases).
 > SHA-256 with the value printed in the release notes (every release ships
 > a `.zip.sha256` asset for exactly that).
 
-> The first launch needs internet. A machine that has neither an NVIDIA card nor
-> a working download path falls back to CPU (~200 MB), which works but is slow.
+> A machine without a DirectML-compatible GPU runs on CPU — slower, but it
+> runs. That machine class was simply unsupported in v2.
 
 > **Updates are built in.** At startup the application checks GitHub for a
 > newer release; when one exists, a green button appears at the end of the
@@ -375,10 +366,10 @@ Other limitations:
 compteur/    pure engine, no GUI dependency — testable without a screen
 interface/   PySide6 window
 config/      default.json: the default values
-installer.py GPU detection + torch installation (CUDA or CPU)
+installer.py development-environment setup
 tools/       command-line scripts
 tests/       pytest
-hooks-v2/    PyInstaller hooks (torch, torchvision, Qt)
+hooks-v2/    PyInstaller hooks (torch excludes kept as belt-and-braces, Qt)
 ```
 
 The key point: `compteur/compteur.py::Compteur` is the engine. The interface
@@ -394,7 +385,7 @@ diverge. Under PyInstaller, this file is embedded and found via `sys._MEIPASS`
 
 ## Tests
 
-The suite never downloads torch and never runs real inference — fake backends
+The suite never runs real inference — fake sessions and fake detectors
 everywhere, lazy imports in `compteur/detecteur.py` — so it is fast by design.
 Iterate on one module, widen only when needed:
 

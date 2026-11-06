@@ -6,9 +6,9 @@
 # pytest.ini) sur un serveur GitHub à chaque push sur master et chaque pull
 # request. La pastille verte/rouge du dépôt reflète alors l'état réel du code.
 #
-# Il ne vérifie PAS le comptage : la suite ne charge jamais torch ni les
-# modèles réels (imports paresseux dans compteur/detecteur.py, faux YOLO dans
-# tests/test_detecteur.py). Il dit « le code est cohérent », pas « le logiciel
+# Il ne vérifie PAS le comptage : la suite ne charge jamais ONNX Runtime ni
+# les modèles réels (imports paresseux dans compteur/detecteur.py, fausse
+# session dans tests/test_detecteur.py). Il dit « le code est cohérent », pas « le logiciel
 # compte juste » — la vérité terrain reste `tools/verite_terrain.py`.
 #
 # ## Les réglages non évidents, et pourquoi ils sont là
@@ -18,13 +18,10 @@
 #   « xcb » qui échoue faute de display. Le mode offscreen rend l'écran
 #   inutile. Les libs système ci-dessous (`libegl1`, `libgl1`) sont ce dont
 #   ce mode a besoin sur Ubuntu.
-# - **torch en version CPU uniquement** : la suite n'a pas besoin de CUDA, et
-#   la wheel CUDA de `pip install torch` pèse plusieurs Go et tire une chaîne
-#   entière de paquets NVIDIA. Le index CPU ne change RIEN pour les tests :
-#   aucun tenseur n'est calculé. `torchvision` doit venir du MÊME index, sinon
-#   pip « répare » la paire en reinstallant la version CUDA.
-# - **Cache pip** : sans lui, chaque run retélécharge ~1,5 Go (torch, PySide6,
-#   opencv...). Le cache est clé sur `requirements.txt` : changer une
+# - **ONNX Runtime CPU sur Linux** : requirements.txt choisit
+#   `onnxruntime-directml` sur Windows et `onnxruntime` (CPU) ailleurs via
+#   des marqueurs de plateforme — la suite ne fait aucune inférence.
+# - **Cache pip** : sans lui, chaque run retélécharge PySide6, opencv... Le cache est clé sur `requirements.txt` : changer une
 #   dépendance invalide le proprement.
 # - `-m "not slow"` : les tests slow lancent des sous-processus complets
 #   (installateur, démarrages d'app), écrits pour la machine de dev
@@ -70,22 +67,14 @@ jobs:
           sudo apt-get install -y --no-install-recommends \
             libegl1 libgl1 libxkbcommon0 libdbus-1-3 libfontconfig1
 
-      - name: Dépendances Python (torch CPU)
+      - name: Dépendances Python
         run: |
           python -m pip install --upgrade pip
-          # torch/torchvision CPU d'abord, DU MÊME index : `pip install
-          # -r requirements.txt` voit alors `torch>=2.4` déjà satisfait et ne
-          # retombe pas sur la wheel CUDA de PyPI.
-          pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+          # Les marqueurs de plateforme de requirements.txt installent
+          # onnxruntime (CPU) sur Linux, directml sur Windows. Plus de purge
+          # opencv : `ultralytics` — qui tirait la variante complète — n'est
+          # plus une dépendance depuis la v3.
           pip install -r requirements.txt
-          # ultralytics réclame `opencv-python` (variante complète) en
-          # dépendance : pip l'installe même si requirements demande la
-          # headless, et les deux écrivent dans le même dossier `cv2/`.
-          # Purge des deux puis headless seule — la même séquence que
-          # docs/BUILDING.md étape 3bis : la CI teste alors le cv2 que
-          # l'exécutable embarquera.
-          pip uninstall -y opencv-python opencv-python-headless
-          pip install opencv-python-headless
 
       - name: Suite de tests (passe rapide)
         run: python -m pytest -m "not slow" -q

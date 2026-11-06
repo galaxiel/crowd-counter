@@ -80,7 +80,7 @@ DOSSIER_PROFILS = pathlib.Path("config") / "profils"
 #: en trouve de 21, soit 38 % de marches réelles en plus. Les `.pt` étant
 #: absents du dépôt, ce nom est une *suggestion* : le panneau l'affiche, sans
 #: l'imposer.
-MODELE_REPLI = "tetes-medium.pt"
+MODELE_REPLI = "tetes-medium.onnx"
 
 #: Tailles d'entrée proposées. Une valeur absente de la liste est ajoutée à
 #: l'affichage plutôt que rejetée en silence.
@@ -307,7 +307,7 @@ def lister_modeles(
     vus: list[str] = []
     for dossier in dossiers:
         try:
-            trouves = sorted(pathlib.Path(dossier).glob("*.pt"))
+            trouves = sorted(pathlib.Path(dossier).glob("*.onnx"))
         except OSError as exc:  # permissions, chemin cassé...
             log.warning("dossier de modèles illisible (%s) : %s", dossier, exc)
             continue

@@ -15,24 +15,27 @@ cd "D:/Bureau/projet manif/crowd-counter"
 /c/Python311/python -m pytest tests/ -v
 ```
 
-`/c/Python311/python` est le seul interpréteur complet : pytest, cv2, PySide6, torch CUDA
-(`2.14.1+cu126`), ultralytics 8.4, numpy, pyinstaller 6.22. Vérifié le 28/10/2026.
+`/c/Python311/python` est le seul interpréteur complet : pytest, cv2, PySide6,
+onnxruntime-directml (moteur v3), numpy, pyinstaller. torch/ultralytics y sont
+aussi, mais uniquement pour le DEV (export .pt -> .onnx, fine-tuning) — le
+moteur livré ne les touche plus. Vérifié le 06/11/2026.
 
 Deux environnements gitignorés, supprimables et recréables vivent dans le dépôt :
 
-- `venv-temp/` — la suite de tests (torch **CPU** suffit : elle ne fait aucune inférence) ;
-- `build-env/` — construire l'exe (torch CUDA + PyInstaller), procédure dans `docs/BUILDING.md`.
+- `venv-temp/` — la suite de tests (aucune inférence réelle, ONNX Runtime CPU suffit) ;
+- `build-env/` — construire l'exe (requirements-dev : PyInstaller + onnxruntime-directml), procédure dans `docs/BUILDING.md`.
 
 Ne jamais réinstaller un environnement qui existe déjà.
 
 Avant de travailler, vérifier d'un coup :
 
 ```bash
-/c/Python311/python -c "import pytest,cv2,PySide6,torch,ultralytics,numpy;print(torch.__version__, torch.cuda.is_available())"
+/c/Python311/python -c "import pytest,cv2,PySide6,numpy,onnxruntime;print(onnxruntime.__version__, onnxruntime.get_available_providers())"
 ```
 
-- `torch.__version__` doit contenir `+cu126`. Un torch CPU s'installe silencieusement et affiche
-  `cuda.is_available() == False` sans erreur — ne jamais annoncer un débit GPU avant ce contrôle.
+- Le provider actif se lit sur la SESSION CRÉÉE (`session.get_providers()`), pas sur
+  `get_available_providers()` — celui-ci liste CUDA même quand ses DLL manquent, et la
+  session retombe ALORS silencieusement sur CPU (mesuré le 06/11/2026).
 - Cet environnement s'est corrompu plusieurs fois (numpy sans `dist-info`, torch CPU en remplacement).
 
 ## Conventions de travail
@@ -62,16 +65,21 @@ Avant de travailler, vérifier d'un coup :
   Windows et Linux — CI déjà rougie une fois) : fixtures `tmp_path` + comparer via
   `pathlib.Path`.
 - Le compte de référence se fait sur le segment **frames 3600-4500** (2 min → 2 min 30).
+- **Moteur v3 = ONNX** : les modèles livrés sont des `.onnx` (export ultralytics
+  depuis les `.pt` source, gardés sur le poste de dev). Parité prouvée : 2 896/2 896
+  détections jumelées, comptes à ±1 — `docs/design/v3-onnx-proposition.md`.
+  Pièges PIQURÉS par la mesure : le graphe attend du RGB (BGR = −7 détections), et le
+  NMS ne se réimplémente PAS (version maison = −1 à −3/frame).
 
 ## Tests
 
 - Porte de routine rapide : `python -m pytest tests/ -q -m "not slow"` (639 tests, ~10 s).
 - Suite complète (62 tests `slow` en plus : sous-processus `installer.py`, détection GPU réelle) :
   `python -m pytest tests/ -q` — **701 tests, ~13 s, 0 échec** (vérifié le 05/11/2026).
-  La suite ne charge jamais torch en inférence : elle est lente par nature uniquement
+  La suite ne fait aucune inférence (fausse session) : elle est lente par nature uniquement
   à cause des sous-processus.
 - CI GitHub Actions (`.github/workflows/tests.yml`) lance la passe rapide à chaque push :
-  Ubuntu, torch CPU, `QT_QPA_PLATFORM=offscreen`, purge opencv-headless identique à
+  Ubuntu, ONNX Runtime CPU (marqueur de plateforme dans requirements.txt), `QT_QPA_PLATFORM=offscreen`,
   `docs/BUILDING.md`. Elle ne valide pas le comptage, seulement la cohérence du code.
 - Un échec dans `tests/test_peripherique.py` en mode slow est presque toujours
   l'**encodage de la console** : un sous-processus écrit des accents (« ÉCHEC ») en CP1252

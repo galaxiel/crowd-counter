@@ -60,7 +60,7 @@ BUILDS_CIBLES = (
 #: Convention de nommage : `cible-poids[-précision].pt`.
 #:   - `tetes-…` : détecteur de têtes (1 classe) ;
 #:   - `personnes-et-objets-…` : détecteur générique (80 classes COCO).
-MODELES_DEFAUT = ("tetes-medium.pt", "tetes-nano.pt", "tetes-medium-1280.pt")
+MODELES_DEFAUT = ("tetes-medium.onnx", "tetes-nano.onnx", "tetes-medium-1280.onnx")
 
 #: Note déposée dans le dossier `modeles/` de l'installation : elle explique à
 #: l'opérateur ce que ce dossier fait, sans qu'il ait à lire le dépôt.
@@ -87,7 +87,7 @@ NOTE_DOSSIER = (
 )
 
 #: Extension acceptée, alignée sur `compteur.detecteur.FORMATS_MODELES`.
-SUFFIXES = (".pt", ".onnx")
+SUFFIXES = (".onnx",)
 
 #: Profils de réglages livrés, dans le dépôt. Présents ici, ils sont copiés
 #: dans `config/profils/` de l'installation par `main` (branche build par

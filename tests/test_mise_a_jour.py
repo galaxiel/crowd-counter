@@ -18,7 +18,7 @@ import zipfile
 import pytest
 
 from compteur import mise_a_jour
-from compteur.telechargement import Annulation, ErreurReseau
+from compteur.erreurs import Annulation, ErreurReseau
 
 EXE = mise_a_jour.EXE_NOM
 
@@ -197,7 +197,7 @@ def _zip_install(dossier: pathlib.Path, extra: dict[str, bytes] | None = None) -
     archive = dossier / "archive.zip"
     contenu = {
         f"CompteurManifestation/{EXE}": b"exe",
-        "CompteurManifestation/modeles/tetes-medium.pt": b"poids livres",
+        "CompteurManifestation/modeles/tetes-medium.onnx": b"poids livres",
         **(extra or {}),
     }
     with zipfile.ZipFile(archive, "w") as z:
@@ -214,8 +214,8 @@ def _installation_ancienne(dossier: pathlib.Path) -> pathlib.Path:
     (app / "config" / "profils").mkdir()
     (app / "config" / "profils" / "dimanche.json").write_text("{}", encoding="utf-8")
     (app / "modeles").mkdir()
-    (app / "modeles" / "tetes-medium.pt").write_bytes(b"anciens poids")
-    (app / "modeles" / "a-moi.pt").write_bytes(b"mon modele")
+    (app / "modeles" / "tetes-medium.onnx").write_bytes(b"anciens poids")
+    (app / "modeles" / "a-moi.onnx").write_bytes(b"mon modele")
     return app
 
 
@@ -228,9 +228,9 @@ def test_extraire_et_migrer(tmp_path):
     assert (nouveau / "config" / "local_theme.json").read_text(encoding="utf-8") == '{"mode": "marine"}'
     assert (nouveau / "config" / "profils" / "dimanche.json").exists()
     # Le modèle déposé suit ; celui livré par la release n'est PAS écrasé.
-    assert (nouveau / "modeles" / "a-moi.pt").read_bytes() == b"mon modele"
-    assert (nouveau / "modeles" / "tetes-medium.pt").read_bytes() == b"poids livres"
-    assert any("a-moi.pt" in c for c in copies)
+    assert (nouveau / "modeles" / "a-moi.onnx").read_bytes() == b"mon modele"
+    assert (nouveau / "modeles" / "tetes-medium.onnx").read_bytes() == b"poids livres"
+    assert any("a-moi.onnx" in c for c in copies)
 
 
 def test_extraire_refuse_le_zip_slip(tmp_path):
@@ -260,7 +260,7 @@ def test_preparer_staging_ecrit_le_script_et_migre(tmp_path):
 
 
 def modeles_rel() -> str:
-    return "modeles/a-moi.pt"
+    return "modeles/a-moi.onnx"
 
 
 def test_preparer_staging_refuse_une_archive_sans_exe(tmp_path):

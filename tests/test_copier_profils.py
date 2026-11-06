@@ -24,7 +24,7 @@ def test_les_profils_livres_se_relisent_en_config():
     for p in profils:
         config = Config.depuis_fichier(p)
         assert config.sens in (1, -1), p
-        assert config.modele.endswith(".pt"), p
+        assert config.modele.endswith(".onnx"), p
 
 
 def test_profils_livres_tries_et_json_seulement(tmp_path: pathlib.Path):

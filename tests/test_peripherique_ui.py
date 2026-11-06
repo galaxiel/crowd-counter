@@ -19,7 +19,7 @@ from compteur.config import (  # noqa: E402
     Config,
     mode_peripherique,
 )
-from compteur.detecteur import DEVICE_CUDA, LIBELLE_CPU  # noqa: E402
+from compteur.detecteur import LIBELLE_CPU  # noqa: E402
 from interface.app import FenetrePrincipale  # noqa: E402
 from interface.panneau_reglages import AIDE, PanneauReglages  # noqa: E402
 
@@ -138,38 +138,44 @@ def test_l_indicateur_existe_des_la_construction(fenetre):
 
 def test_l_indicateur_nomme_la_carte_quand_il_y_en_a_une(fenetre):
     texte = fenetre.label_peripherique.text()
-    cuda = fenetre.device_effectif().startswith("cuda")
-    if cuda:
-        assert "CUDA" in texte
-    else:
+    if fenetre.device_effectif() == "CPUExecutionProvider":
         assert LIBELLE_CPU in texte
+    else:
+        assert "DirectML" in texte or "CUDA" in texte
 
 
 def test_l_indicateur_et_le_device_disent_la_meme_chose(fenetre, monkeypatch):
     """Ce qui est affiché et ce qui est utilisé doivent coïncider."""
-    monkeypatch.setattr("compteur.detecteur.cuda_disponible", lambda: False)
+    monkeypatch.setattr(
+        "compteur.detecteur.providers_disponibles",
+        lambda: ["CPUExecutionProvider"],
+    )
     fenetre._maj_peripherique()
     assert LIBELLE_CPU in fenetre.label_peripherique.text()
-    assert fenetre.device_effectif() == "cpu"
+    assert fenetre.device_effectif() == "CPUExecutionProvider"
 
-    monkeypatch.setattr("compteur.detecteur.cuda_disponible", lambda: True)
-    monkeypatch.setattr("compteur.detecteur.nom_cuda", lambda: "NVIDIA GeForce RTX 4070 SUPER")
+    monkeypatch.setattr(
+        "compteur.detecteur.providers_disponibles",
+        lambda: ["DmlExecutionProvider", "CPUExecutionProvider"],
+    )
     fenetre._maj_peripherique()
-    assert "RTX 4070" in fenetre.label_peripherique.text()
-    assert fenetre.device_effectif() == DEVICE_CUDA
+    assert "DirectML" in fenetre.label_peripherique.text()
+    assert fenetre.device_effectif() == "DmlExecutionProvider"
 
 
 def test_l_indicateur_suit_le_reglage_du_panneau(fenetre, monkeypatch):
     """Passer le panneau sur « CPU uniquement » doit changer l'affichage."""
-    monkeypatch.setattr("compteur.detecteur.cuda_disponible", lambda: True)
-    monkeypatch.setattr("compteur.detecteur.nom_cuda", lambda: "NVIDIA GeForce RTX 4070 SUPER")
+    monkeypatch.setattr(
+        "compteur.detecteur.providers_disponibles",
+        lambda: ["DmlExecutionProvider", "CPUExecutionProvider"],
+    )
     fenetre._maj_peripherique()
-    assert fenetre.device_effectif() == DEVICE_CUDA
+    assert fenetre.device_effectif() == "DmlExecutionProvider"
 
     fenetre.panneau.definir_peripherique(PERIPHERIQUE_CPU)
     assert fenetre.config.peripherique == PERIPHERIQUE_CPU
     assert LIBELLE_CPU in fenetre.label_peripherique.text()
-    assert fenetre.device_effectif() == "cpu"
+    assert fenetre.device_effectif() == "CPUExecutionProvider"
 
 
 def test_l_indicateur_survit_aux_changements_de_statut(fenetre):
@@ -197,11 +203,13 @@ def test_changer_de_peripherique_invalide_le_detecteur(fenetre, monkeypatch):
     annoncerait « CPU » pendant que l'analyse tourne encore sur le GPU —
     l'inverse exact du problème que l'indicateur sert à résoudre.
     """
-    monkeypatch.setattr("compteur.detecteur.cuda_disponible", lambda: True)
-    monkeypatch.setattr("compteur.detecteur.nom_cuda", lambda: "NVIDIA GeForce RTX 4070 SUPER")
+    monkeypatch.setattr(
+        "compteur.detecteur.providers_disponibles",
+        lambda: ["DmlExecutionProvider", "CPUExecutionProvider"],
+    )
     fenetre._maj_peripherique()
     fenetre.detecteur = object()
-    fenetre._modele_charge = "tetes-medium.pt"
+    fenetre._modele_charge = "tetes-medium.onnx"
 
     fenetre.panneau.definir_peripherique(PERIPHERIQUE_CPU)
     assert fenetre.detecteur is None
@@ -211,6 +219,6 @@ def test_changer_de_peripherique_invalide_le_detecteur(fenetre, monkeypatch):
 def test_un_reglage_ordinaire_ne_recharge_pas_le_modele(fenetre):
     """Le relâchement du détecteur est réservé au périphérique et au modèle."""
     fenetre.detecteur = object()
-    fenetre._modele_charge = "tetes-medium.pt"
+    fenetre._modele_charge = "tetes-medium.onnx"
     fenetre.panneau.definir_seuil(0.5)
     assert fenetre.detecteur is not None

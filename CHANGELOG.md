@@ -41,7 +41,31 @@ doivent être posés dans `modeles/` (voir le README).
   ou de la verticale se colle exactement droite (recalage du second point).
   Un tracé franchement diagonal n'est pas déplacé.
 
-## [Non publié]
+## [3.0.0] — 2026-11-06
+
+### Changed — CHANGEMENT DE CONTRAT D'INSTALLATION (le « majeur » du projet)
+
+- **Le moteur est ONNX Runtime : plus de torch, plus d'ultralytics, plus de
+  téléchargement de 2,4 Go au premier lancement.** Les modèles livrés sont
+  des graphes `.onnx` ; l'accélération GPU passe par DirectML, qui pilote
+  NVIDIA, AMD **et** Intel — la v2 exigeait une carte NVIDIA.
+- **Parité prouvée** avant bascule : 2 896/2 896 détections jumelées sur 60
+  frames de référence ; comptes identiques à ±1 sur les quatre vidéos
+  terrain ; DirectML mesuré à 51,2 i/s sur RTX 4070 (88 % de torch). Détail
+  complet et deux pièges trouvés par la mesure (RGB obligatoire, NMS à ne
+  pas réimplémenter) dans `docs/design/v3-onnx-proposition.md`.
+- `main.py` ne reconstruit plus de venv, plus d'écran d'installation :
+  le double-clic ouvre la fenêtre. `compteur/telechargement.py` (1 545
+  lignes) et `interface/demarrage.py` supprimés.
+- Le poids du zip monte à ~380 Mo (les graphes FP32), contre 213 Mo — mais
+  le téléchargement de 2,4 Go disparaît.
+
+### Added
+
+- `compteur/erreurs.py` : exceptions et dossier de données survivant au
+  retrait du téléchargement.
+
+## [2.10.0] — 2026-11-05
 
 ### Ajouté
 
@@ -52,7 +76,31 @@ doivent être posés dans `modeles/` (voir le README).
   le geste d'installation : il n'apparaît que quand une mise à jour
   existe.
 
-## [Non publié]
+## [3.0.0] — 2026-11-06
+
+### Changed — CHANGEMENT DE CONTRAT D'INSTALLATION (le « majeur » du projet)
+
+- **Le moteur est ONNX Runtime : plus de torch, plus d'ultralytics, plus de
+  téléchargement de 2,4 Go au premier lancement.** Les modèles livrés sont
+  des graphes `.onnx` ; l'accélération GPU passe par DirectML, qui pilote
+  NVIDIA, AMD **et** Intel — la v2 exigeait une carte NVIDIA.
+- **Parité prouvée** avant bascule : 2 896/2 896 détections jumelées sur 60
+  frames de référence ; comptes identiques à ±1 sur les quatre vidéos
+  terrain ; DirectML mesuré à 51,2 i/s sur RTX 4070 (88 % de torch). Détail
+  complet et deux pièges trouvés par la mesure (RGB obligatoire, NMS à ne
+  pas réimplémenter) dans `docs/design/v3-onnx-proposition.md`.
+- `main.py` ne reconstruit plus de venv, plus d'écran d'installation :
+  le double-clic ouvre la fenêtre. `compteur/telechargement.py` (1 545
+  lignes) et `interface/demarrage.py` supprimés.
+- Le poids du zip monte à ~380 Mo (les graphes FP32), contre 213 Mo — mais
+  le téléchargement de 2,4 Go disparaît.
+
+### Added
+
+- `compteur/erreurs.py` : exceptions et dossier de données survivant au
+  retrait du téléchargement.
+
+## [2.10.0] — 2026-11-05
 
 ### Corrigé
 

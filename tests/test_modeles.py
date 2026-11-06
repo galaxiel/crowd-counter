@@ -49,7 +49,7 @@ def test_dossier_personnel_partage_la_racine_du_cache(bac_a_sable):
     Deux noms qui divergent, et les modèles de l'opérateur atterrissent dans
     un dossier que plus personne ne balaie.
     """
-    from compteur.telechargement import dossier_cache
+    from compteur.erreurs import dossier_cache
 
     assert dossier_modeles_utilisateur().parent == dossier_cache()
 

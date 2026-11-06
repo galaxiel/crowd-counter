@@ -1,18 +1,22 @@
-"""Détection : image numpy -> liste de boîtes, via YOLO (ultralytics).
+"""Détection : image numpy -> liste de boîtes, via ONNX Runtime (moteur v3).
 
-Ce module est l'entrée du pipeline : il transforme une frame en
-`Detection` exploitables par le suivi et le comptage.
+CHANGEMENT DE CONTRAT DE LA v3 : plus de torch, plus d'ultralytics, plus
+de téléchargement de 2,4 Go. Le modèle est un graphe `.onnx` appliqué par
+ONNX Runtime ; le prétraitement et le NMS — qui étaient le travail
+d'ultralytics — sont vendores ICI, en numpy pur. Leur exactitude est
+prouvée par parité contre l'ancien chemin : 2 896/2 896 détections jumelées
+sur 60 frames de référence, et des comptes identiques à ±1 sur les quatre
+vidéos terrain (voir `docs/design/v3-onnx-proposition.md`).
 
 Deux règles structurantes :
 
-- `ultralytics` et `torch` ne sont importés qu'à l'intérieur de
-  :func:`charger_modele`. Les importer au niveau du module ferait échouer
-  toute la suite de tests sur une machine sans ces paquets, et
-  `ultralytics` tire derrière lui des modules graphiques.
-- l'API ultralytics réellement attendue est vérifiée par les tests :
-  ``modele(img, **kw)`` renvoie une **liste** de résultats, ``resultat.boxes``
-  est un **attribut**, et ``boxes.xyxy`` / ``.conf`` / ``.cls`` sont des
-  **propriétés** renvoyant des tenseurs.
+- `onnxruntime` n'est importé qu'à l'intérieur de :func:`charger_modele`.
+  L'importer au niveau du module ferait échouer toute la suite de tests
+  sur une machine sans ce paquet ;
+- les ops vendues ci-dessous (`_letterbox`, `_echelle_boites`, `_nms`)
+  répliquent le comportement d'ultralytics au pixel près — un écart de
+  détection limite change le décompte, elles sont donc verrouillées par
+  les tests de parité (tests/test_detecteur.py).
 """
 
 from __future__ import annotations
@@ -35,13 +39,24 @@ from .types import Detection
 
 log = logging.getLogger(__name__)
 
-FORMATS_MODELES = (".pt", ".onnx")
+FORMATS_MODELES = (".onnx",)
 
-#: Valeur passée à ultralytics pour utiliser le GPU.
-DEVICE_CUDA = "cuda:0"
-
-#: Libellé affiché quand aucun GPU n'est utilisé, ou quand aucun GPU n'existe.
+#: Libellé affiché quand aucun accélérateur GPU n'est utilisé.
 LIBELLE_CPU = "CPU uniquement"
+
+#: Providers par réglage, du préféré au repli. DirectML couvre TOUTES les
+#: cartes (NVIDIA, AMD, Intel) sous Windows ; le paquet installé décide de
+#: ce qui est réellement disponible (`onnxruntime-directml` ne propose pas
+#: CUDA, `onnxruntime-gpu` ne propose pas DML — un seul est installé).
+PROVIDERS = {
+    "auto": ["DmlExecutionProvider", "CUDAExecutionProvider", "CPUExecutionProvider"],
+    "dml": ["DmlExecutionProvider", "CPUExecutionProvider"],
+    # « cuda » (GPU exigé) accepte DirectML : c'est la couche GPU de
+    # Windows, elle pilote les NVIDIA aussi — et le libellé affiché
+    # reste honnête quel que soit le provider retenu.
+    "cuda": ["DmlExecutionProvider", "CUDAExecutionProvider", "CPUExecutionProvider"],
+    "cpu": ["CPUExecutionProvider"],
+}
 
 
 class ChoixPeripherique(NamedTuple):
@@ -58,336 +73,107 @@ class ChoixPeripherique(NamedTuple):
     avertissement: str | None = None
 
 
-def cuda_disponible() -> bool:
-    """Vrai si torch voit un GPU utilisable.
+def _session_onnxruntime():
+    """Import paresseux d'ONNX Runtime (jamais au niveau du module)."""
+    import onnxruntime  # noqa: PLC0415
 
-    Import de torch PARESSEUX, pour une raison structurelle : le reste du
-    paquet doit rester importable et testable sur une machine sans torch, et
-    `compteur/` ne doit rien importer de lourd au niveau du module.
+    return onnxruntime
 
-    On interroge `device_count()` et NON `is_available()`. Mesuré sur cette
-    machine (Windows, torch 2.14.1+cu126, `CUDA_VISIBLE_DEVICES=""`) :
-    `is_available()` renvoie `True` alors que `device_count()` renvoie 0 — le
-    premier lit un état initialisé et mis en cache, le second recompte à
-    chaque appel. Sur un PC sans carte, c'est exactement le genre d'écart qui
-    fait croire à un GPU alors qu'il n'y en a pas, et qui envoie l'opérateur
-    chercher une carte graphique pendant une heure.
 
-    Torch absent n'est pas une panne : il n'y a rien à accélérer, donc le
-    repli CPU est la seule chose possible. En revanche un torch *présent mais
-    cassé* (DLL CUDA manquante) lève : là, dire « CPU uniquement » serait faux,
-    puisque le CPU n'est pas forcément utilisable non plus. On laisse
-    remonter l'erreur.
+def providers_disponibles() -> list[str]:
+    """Les providers réellement actifs dans le paquet installé."""
+    return list(_session_onnxruntime().get_available_providers())
+
+
+def choix_peripherique(peripherique: str = PERIPHERIQUE_AUTO) -> ChoixPeripherique:
+    """Traduit le réglage en provider concret, repli CPU documenté.
+
+    `auto` : premier provider GPU disponible (DirectML puis CUDA), CPU
+    sinon — sans avertissement, c'est le comportement attendu. Un réglage
+    explicite indisponible (`cuda` sur une machine dont le paquet ne le
+    propose pas) tombe sur le CPU AVEC un avertissement : un crash sur le
+    terrain coûte plus cher qu'une analyse lente qu'on peut au moins
+    regarder, parce que l'opérateur voit la cause affichée et peut décider.
     """
-    try:
-        import torch
-    except ImportError:
-        log.warning("torch absent : seul le CPU est envisageable.")
-        return False
-
-    return int(torch.cuda.device_count()) > 0
-
-
-def nom_cuda() -> str:
-    """Nom commercial de la carte, ou chaîne vide si elle est inconnue."""
-    import torch
-
-    try:
-        return str(torch.cuda.get_device_name(0)).strip()
-    except Exception as exc:  # noqa: BLE001 — nom purely informatif
-        log.debug("nom de la carte CUDA illisible : %s", exc)
-        return ""
-
-
-def peripherique_effectif(choisi: str = PERIPHERIQUE_AUTO) -> ChoixPeripherique:
-    """Traduit le réglage `Config.peripherique` en périphérique réellement utilisé.
-
-    Les trois cas, et ce qu'ils produisent :
-
-    - `auto` : CUDA si la machine en a un, CPU sinon. Rien à signaler.
-    - `cuda` : CUDA exigé. Si la machine n'en a pas, on bascule sur le CPU
-      **avec un message** plutôt que de lever. Le choix est assumé : sur le
-      terrain, une analyse quatre fois plus lente mais qui rend un chiffre
-      vaut mieux qu'un plantage, parce que l'opérateur voit la cause affichée
-      et peut décider. Une erreur franche serait plus « propre » en théorie et
-      plus pénible sur le terrain : l'opérateur est devant un laptop qui n'a
-      pas de GPU NVIDIA, pas devant une bibliothèque.
-    - `cpu` : CPU exigé, même avec un GPU présent. Rien à signaler non plus :
-      c'est un choix, pas une privation. Si aucun GPU n'est là, on le dit
-      quand même — « CPU uniquement » n'a pas la même signification selon la
-      machine.
-    """
-    mode = mode_peripherique(choisi)
-    cuda = cuda_disponible()
-
-    if mode == PERIPHERIQUE_CPU:
-        avertissement = None
-        if cuda:
-            avertissement = (
-                "Calcul forcé sur le CPU alors qu'un GPU est disponible : "
-                "l'analyse sera plus lente."
-            )
-        else:
-            avertissement = "Aucun GPU détecté sur cette machine : calcul sur le CPU."
-        return ChoixPeripherique("cpu", LIBELLE_CPU, False, avertissement)
-
-    if mode == PERIPHERIQUE_CUDA and not cuda:
+    disponibles = providers_disponibles()
+    preferes = PROVIDERS.get(peripherique)
+    if preferes is None:
         return ChoixPeripherique(
-            "cpu",
-            LIBELLE_CPU,
-            False,
-            "Calcul sur GPU demandé, mais aucun GPU CUDA n'est disponible : "
-            "l'analyse bascule sur le CPU, beaucoup plus lentement.",
+            device="CPUExecutionProvider",
+            libelle=LIBELLE_CPU,
+            cuda=False,
+            avertissement=f"périphérique inconnu : {peripherique} — CPU utilisé.",
         )
-
-    if cuda:
-        nom = nom_cuda()
-        libelle = f"CUDA — {nom}" if nom else "CUDA"
-        return ChoixPeripherique(DEVICE_CUDA, libelle, True, None)
-
-    # Mode auto, aucune carte : c'est le cas normal d'un portable sans GPU.
+    for fournisseur in preferes:
+        if fournisseur in disponibles:
+            gpu = fournisseur != "CPUExecutionProvider"
+            libelle = {
+                "DmlExecutionProvider": "GPU (DirectML)",
+                "CUDAExecutionProvider": "GPU (CUDA)",
+                "CPUExecutionProvider": LIBELLE_CPU,
+            }[fournisseur]
+            avertissement = (
+                "Aucun GPU accessible : l'analyse continue sur le CPU."
+                if peripherique == PERIPHERIQUE_CUDA and not gpu
+                else None
+            )
+            return ChoixPeripherique(
+                device=fournisseur, libelle=libelle, cuda=gpu,
+                avertissement=avertissement,
+            )
     return ChoixPeripherique(
-        "cpu",
-        LIBELLE_CPU,
-        False,
-        "Aucun GPU CUDA détecté : calcul sur le CPU, l'analyse sera très lente.",
+        device="CPUExecutionProvider",
+        libelle=LIBELLE_CPU,
+        cuda=False,
+        avertissement=(
+            f"Réglage « {peripherique} » indisponible (paquet installé : "
+            f"{', '.join(disponibles)}) — analyse sur le CPU."
+        ),
     )
 
 
+def peripherique_effectif(choisi: str = PERIPHERIQUE_AUTO) -> ChoixPeripherique:
+    """Nom historique de :func:`choix_peripherique` (l'UI et les outils l'appellent)."""
+    return choix_peripherique(choisi)
+
+
+def cuda_disponible() -> bool:
+    """Un accélérateur GPU est-il utilisable ? (nom historique conservé.)"""
+    return choix_peripherique(PERIPHERIQUE_AUTO).cuda
+
+
+def nom_cuda() -> str:
+    """Le libellé de l'accélération effective. (Nom historique conservé.)"""
+    return choix_peripherique(PERIPHERIQUE_AUTO).libelle
+
+
 def libelle_peripherique(choisi: str = PERIPHERIQUE_AUTO) -> str:
-    """Texte court pour la barre de statut : « Calcul : … ».
-
-    Exposé séparément de `peripherique_effectif` parce que l'interface n'a
-    besoin que du texte, jamais du.device : afficher « cuda:0 » à
-    l'opérateur serait du jargon de développeur.
-    """
-    return f"Calcul : {peripherique_effectif(choisi).libelle}"
-
-
-class Detecteur:
-    """Enveloppe mince autour d'un modèle ultralytics.
-
-    Le modèle est injecté pour que les tests n'aient besoin ni d'un GPU ni de
-    poids sur disque. En production, le construire avec :func:`charger_modele`.
-
-    Les filtrages (seuil de confiance, taille minimale, classes retenues) sont
-    appliqués ici même si le modèle est déjà paramétré pour le seuil : c'est
-    la seule garantie que la valeur de `Config` fait autorité, quel que soit
-    le modèle fourni.
-
-    **Ce module ne connaît pas la ligne de comptage.** Il ne fait qu'appliquer
-    un rectangle qu'on lui fournit — voir `detecter`. C'est le `Compteur`, qui
-    possède la ligne, qui décide de la bande ; il n'a qu'à la geometrie, jamais
-    d'affichage.
-    """
-
-    def __init__(self, modele, config: Config, half: bool = False) -> None:
-        self.modele = modele
-        self.config = config
-        # Demi-précision (FP16), DÉSACTIVÉE par défaut — décision MESURÉE le
-        # 22/10/2026 sur la référence (3000 frames, imgsz 640, RTX 4070 SUPER) :
-        #   - décalage du décompte : 259 → 257 (bande 250/250) et 257 → 255
-        #     (bande 200/100) ;
-        #   - aucun gain de vitesse : 44 s (FP32) contre 47 s (FP16) en lot de
-        #     4, 117 s contre 106 s en lot de 1 — écarts dans le bruit.
-        # Un changement de résultat sans gain de vitesse ne se justifie pas.
-        # Le paramètre reste exposé pour expérimenter sur une machine où la
-        # bande passante GPU serait réellement le goulot.
-        self._half = bool(half)
-
-    def detecter(
-        self, img: np.ndarray, bande: tuple[int, int, int, int] | None = None
-    ) -> list[Detection]:
-        """Boîtes de `img`, éventuellement restreintes à `bande`.
-
-        `bande` est un rectangle ``(x1, y1, x2, y2)`` en pixels de l'image
-        NATIVE, ou `None` pour analyser l'image entière. `None` est aussi ce
-        qui est renvoyé si la bande déborde entièrement de l'image : on
-        analyse alors tout, ce qui est plus sûr qu'une coupe vide.
-
-        **Le rognage se fait ici, sur l'image native, AVANT la redimension
-        pour le modèle.** C'est le seul endroit où il coûte quelque chose : la
-        copie numpy est faite une fois, sur la frame telle qu'elle sort de la
-        vidéo. Rogner après la mise à l'échelle `imgsz` reviendrait à
-        redimensionner toute l'image puis à jeter 80 % du résultat — le même
-        travail, aucun gain.
-
-        **Les coordonnées sont ramenées dans le repère de l'image pleine.** Le
-        modèle ne connaît que la bande : ses boîtes sont décalées vers 0. Sans
-        la correction ci-dessous, le tracker verrait toutes les personnes
-        ramassées contre x=0 et le compteur les ferait passer à côté de la
-        ligne — un décompte faux, sans le moindre signe à l'écran puisque
-        l'affichage se fait lui aussi en coordonnées d'image pleine.
-        """
-        decalage_x = decalage_y = 0
-        if bande is not None:
-            x1, y1, x2, y2 = (int(v) for v in bande)
-            # `copy()` : la coupe doit être CONTIGUË. Un slicing numpy est une
-            # vue avec un stride, et OpenCV refuse — ou pire, lit de travers —
-            # un buffer non contigu. La copie est faite une fois par frame,
-            # quelques dizaines de kilo-octets : négligeable devant le calcul.
-            img = np.ascontiguousarray(img[y1:y2, x1:x2])
-            decalage_x, decalage_y = x1, y1
-
-        kw = dict(
-            conf=self.config.seuil_confiance,
-            imgsz=self.config.taille_entree,
-            verbose=False,
-        )
-        # `half` n'est passé QUE quand il est actif : les faux modèles des
-        # tests vérifient les clés réellement envoyées, et un `half=False`
-        # constant changerait la forme de l'appel pour rien.
-        if self._half:
-            kw["half"] = True
-        results = self.modele(img, **kw)
-        # Une image en entrée donne un résultat ; ultralytics renvoie une liste.
-        return self._vers_detections(results[0], decalage_x, decalage_y)
-
-    def detecter_lot(
-        self, imgs: list[np.ndarray], bande: tuple[int, int, int, int] | None = None
-    ) -> list[list[Detection]]:
-        """Détecte PLUSIEURS images en un appel modèle, sans changer le résultat.
-
-        Pourquoi grouper : le GPU paie des frais fixes à chaque appel
-        (transfert, préparation, emballage des résultats). Les partager sur un
-        lot réduit ces frais par image ; c'est le seul gain, la SEMANTIQUE est
-        inchangée — ultralytics traite chaque image d'un lot indépendamment
-        (redimension, NMS), et renvoie les résultats dans l'ordre des images
-        d'entrée.
-
-        `bande` est le MÊME rectangle pour tout le lot : la ligne est
-        verrouillée pendant une analyse, donc le décalage aussi. Même contrat
-        de sortie que `detecter`, par image : une liste de listes de
-        `Detection` en coordonnées de l'image pleine.
-
-        Un lot d'une seule image repasse par `detecter` : le chemin unitaire
-        reste LA référence du comportement.
-        """
-        if len(imgs) == 1:
-            return [self.detecter(imgs[0], bande)]
-
-        if bande is not None:
-            x1, y1, x2, y2 = (int(v) for v in bande)
-            # Même exigence de contiguïté que dans `detecter`, pour chaque
-            # image du lot.
-            images = [np.ascontiguousarray(img[y1:y2, x1:x2]) for img in imgs]
-            decalage_x, decalage_y = x1, y1
-        else:
-            images = list(imgs)
-            decalage_x = decalage_y = 0
-
-        kw = dict(
-            conf=self.config.seuil_confiance,
-            imgsz=self.config.taille_entree,
-            verbose=False,
-        )
-        if self._half:
-            kw["half"] = True
-        resultats = self.modele(images, **kw)
-        return [
-            self._vers_detections(r, decalage_x, decalage_y) for r in resultats
-        ]
-
-    def _vers_detections(
-        self, resultat, decalage_x: float, decalage_y: float
-    ) -> list[Detection]:
-        """Convertit UN résultat ultralytics en `Detection` décalées, filtrées.
-
-        Les filtrages (seuil de confiance, taille minimale, classes retenues)
-        sont appliqués ici même si le modèle est déjà paramétré : c'est la
-        seule garantie que la valeur de `Config` fait autorité, quel que soit
-        le modèle fourni.
-        """
-        boites = resultat.boxes
-        if boites is None or len(boites) == 0:
-            return []
-
-        detections: list[Detection] = []
-        for coords, score, class_id in zip(
-            boites.xyxy.tolist(), boites.conf.tolist(), boites.cls.tolist()
-        ):
-            bx1, by1, bx2, by2 = coords
-            class_id = int(class_id)
-            score = float(score)
-
-            if score < self.config.seuil_confiance:
-                continue
-            if (
-                self.config.classes_retenues is not None
-                and class_id not in self.config.classes_retenues
-            ):
-                continue
-            largeur = bx2 - bx1
-            hauteur = by2 - by1
-            mini = self.config.taille_min_px
-            if largeur < mini or hauteur < mini:
-                continue
-
-            detections.append(
-                Detection(
-                    x1=float(bx1) + decalage_x,
-                    y1=float(by1) + decalage_y,
-                    x2=float(bx2) + decalage_x,
-                    y2=float(by2) + decalage_y,
-                    score=score,
-                    class_id=class_id,
-                )
-            )
-        return detections
-
-    def changer_taille_entree(self, taille: int) -> None:
-        """Change la taille d'inférence utilisée au prochain `detecter`."""
-        self.config.taille_entree = int(taille)
-
-    def noms_classes(self) -> dict[int, str]:
-        """Correspondance id -> nom, telle que le modèle la publie.
-
-        `modele.names` est un dict dans les versions courantes d'ultralytics,
-        mais une liste a déjà circulé : les deux formes sont acceptées plutôt
-        que de renvoyer silencieusement un dict vide.
-        """
-        noms = getattr(self.modele, "names", None)
-        if isinstance(noms, dict):
-            return dict(noms)
-        if noms is None:
-            return {}
-        return {i: str(n) for i, n in enumerate(noms)}
+    """La ligne d'indicateur de la barre de statut : « Calcul : … »."""
+    return f"Calcul : {choix_peripherique(choisi).libelle}"
 
 
 def message_modele_absent(chemin: str) -> str:
-    """Message actionnable d'un modèle introuvable, à part pour deux raisons.
-
-    L'IHM valide le chemin AVANT de lancer son thread de chargement — un
-    `.pt` absent doit être dit sans asynchronisme — et doit formuler la
-    MÊME erreur que :func:`charger_modele`, sans avoir à la provoquer. Le
-    message liste les dossiers réellement balayés (`dossiers_modeles()`,
-    appelé à chaque affichage) : une copie en dur divergerait au premier
-    changement d'installation.
-    """
-    cherches = "\n".join(f"  - {d}" for d in dossiers_modeles())
+    """Le message complet quand un modèle est introuvable sur le disque."""
+    cherches = "\n".join(str(d) for d in dossiers_modeles())
     return (
-        f"modèle introuvable : {chemin}\n"
+        f"Modèle introuvable : {chemin}\n"
         f"Cherché tel quel, puis dans :\n{cherches}\n"
-        "Dépose le fichier .pt dans « modeles/ », ou choisis-le avec le "
+        "Dépose le fichier .onnx dans « modeles/ », ou choisis-le avec le "
         "bouton « Parcourir… » des réglages."
     )
 
 
 def charger_modele(chemin: str, peripherique: str = PERIPHERIQUE_AUTO):
-    """Charge un modèle YOLO depuis le disque, sur le périphérique demandé.
+    """Charge un graphe `.onnx` via ONNX Runtime, provider demandé.
 
-    Le chemin est validé *avant* tout import lourd : sur une machine sans
-    `torch`, l'erreur promise par l'API (`FileNotFoundError`) doit rester
+    Le chemin est résolu *avant* tout import lourd : sur une machine sans
+    `onnxruntime`, l'erreur promise par l'API (`FileNotFoundError`) reste
     celle que l'appelant reçoit, pas un `ModuleNotFoundError`.
 
     Le fichier est cherché tel quel, puis dans les dossiers de
     `config.dossiers_modeles()` (dossier courant, `modeles/`, dossier
-    personnel) — les mêmes que la liste déroulante des réglages, dans le même
-    ordre.
-
-    `peripherique` est le réglage de `Config.peripherique` (`auto`, `cuda`,
-    `cpu`). La valeur par défaut est `auto`, ce qui reproduit exactement le
-    comportement historique : CUDA si la machine en a un, CPU sinon.
+    personnel) — les mêmes que la liste déroulante des réglages, dans le
+    même ordre.
     """
     p = resoudre_modele(chemin)
     if p is None:
@@ -395,20 +181,248 @@ def charger_modele(chemin: str, peripherique: str = PERIPHERIQUE_AUTO):
     if p.suffix.lower() not in FORMATS_MODELES:
         raise ValueError(
             f"format de modèle non supporté : {p.suffix} "
-            f"(attendu : {', '.join(FORMATS_MODELES)})"
+            f"(attendu : {', '.join(FORMATS_MODELES)}) — un graphe .onnx se "
+            f"génère depuis un .pt par export ultralytics."
         )
 
-    # Imports paresseux : le reste du paquet doit rester utilisable et
-    # testable sans ultralytics ni torch.
-    import torch
-    from ultralytics import YOLO
-
-    choix = peripherique_effectif(peripherique)
+    ort = _session_onnxruntime()
+    choix = choix_peripherique(peripherique)
     if choix.avertissement:
         log.warning("%s", choix.avertissement)
-    log.info("périphérique de détection : %s", choix.device)
-    modele = YOLO(str(p))
-    # Le device est passé À LA PRÉDICTION, pas au constructeur : `YOLO(...)`
-    # accepte `device=` mais qui l'ignore sur certaines versions, alors que
-    # `.to()` passe par le chemin standard de torch et fonctionne partout.
-    return modele.to(choix.device)
+    # PIÈGE mesuré le 06/11 : `get_available_providers()` liste un provider
+    # même quand ses DLL manquent, et `InferenceSession` retombe ALORS
+    # silencieusement sur le CPU. Le provider réellement actif se lit sur
+    # la session CRÉÉE — on le vérifie, et on le dit si ce n'est pas celui
+    # demandé.
+    session = ort.InferenceSession(str(p), providers=[choix.device])
+    actif = session.get_providers()[0]
+    if actif != choix.device:
+        log.warning(
+            "provider %s demandé mais %s actif — analyse sur le repli.",
+            choix.device, actif,
+        )
+    else:
+        log.info("périphérique de détection : %s", actif)
+    return session
+
+
+# -- Ops vendues (l'ex-travail d'ultralytics, en numpy pur) --------------
+
+
+def _letterbox(
+    img: np.ndarray, taille: int
+) -> tuple[np.ndarray, float, tuple[int, int]]:
+    """Redimensionne et pad l'image pour l'inférence, comme ultralytics.
+
+    Ratio = taille / plus long côté ; le résultat est porté au multiple de
+    32 supérieur (stride du modèle) avec le padding MINIMAL restant
+    (auto=True), CENTRÉ avec l'arrondi asymétrique d'ultralytics
+    (`round(x - 0.1)` à gauche/haut, `round(x + 0.1)` à droite/bas),
+    couleur 114, interpolation INTER_LINEAR. Retour : (image, ratio,
+    (pad_gauche, pad_haut)).
+    """
+    import cv2  # noqa: PLC0415
+
+    h, w = img.shape[:2]
+    r = min(taille / h, taille / w)
+    nh, nw = round(h * r), round(w * r)
+    dw, dh = (taille - nw) % 32, (taille - nh) % 32
+    dw, dh = dw / 2, dh / 2
+    gauche, droite = round(dw - 0.1), round(dw + 0.1)
+    haut, bas = round(dh - 0.1), round(dh + 0.1)
+    encadre = np.full(
+        (nh + haut + bas, nw + gauche + droite, 3), 114, dtype=np.uint8
+    )
+    if (w, h) != (nw, nh):
+        img = cv2.resize(img, (nw, nh), interpolation=cv2.INTER_LINEAR)
+    encadre[haut : haut + nh, gauche : gauche + nw] = img
+    return encadre, r, (gauche, haut)
+
+
+def _vers_tenseur(encadre: np.ndarray) -> np.ndarray:
+    """Letterbox -> tenseur (1, 3, H, W) float32 : BGR->RGB, /255, CHW.
+
+    La conversion BGR->RGB est OBLIGATOIRE : le graphe est issu d'un
+    modèle entraîné en RGB, et ultralytics la fait avant l'inférence.
+    Trouvé par la mesure (05/11) : en BGR, 42 détections contre 49 au
+    même pixel.
+    """
+    x = encadre[..., ::-1].astype(np.float32) / 255.0
+    return np.ascontiguousarray(x.transpose(2, 0, 1))[None]
+
+
+def _nms(boites: np.ndarray, scores: np.ndarray, iou: float) -> list[int]:
+    """NMS glouton, sémantique de torchvision.ops.nms : tri par score
+    décroissant (stable — les égalités gardent l'ordre d'origine), on
+    écarte toute boîte qui chevauche STRICTEMENT plus que `iou` une boîte
+    déjà gardée."""
+    x1, y1, x2, y2 = boites[:, 0], boites[:, 1], boites[:, 2], boites[:, 3]
+    aires = (x2 - x1) * (y2 - y1)
+    ordre = np.argsort(-scores, kind="stable")
+    garde: list[int] = []
+    while ordre.size:
+        i = int(ordre[0])
+        garde.append(i)
+        xx1 = np.maximum(x1[i], x1[ordre[1:]])
+        yy1 = np.maximum(y1[i], y1[ordre[1:]])
+        xx2 = np.minimum(x2[i], x2[ordre[1:]])
+        yy2 = np.minimum(y2[i], y2[ordre[1:]])
+        inter = np.maximum(0, xx2 - xx1) * np.maximum(0, yy2 - yy1)
+        union = aires[i] + aires[ordre[1:]] - inter
+        # Restent en course : celles qui ne chevauchent PAS trop la boîte
+        # gardée (strictement plus que `iou` = supprimée).
+        ordre = ordre[1:][(inter / union) <= iou]
+    return garde
+
+
+def _echelle_boites(
+    boites: np.ndarray, forme_letterbox: tuple, forme_origine: tuple
+) -> np.ndarray:
+    """Letterbox -> image d'origine : padding centré retiré, ratio inversé,
+    borné à l'image — la formule exacte de `ultralytics.ops.scale_boxes`."""
+    h_orig, w_orig = forme_origine
+    h_enc, w_enc = forme_letterbox
+    gain = min(h_enc / h_orig, w_enc / w_orig)
+    pad_x = round((w_enc - w_orig * gain) / 2 - 0.1)
+    pad_y = round((h_enc - h_orig * gain) / 2 - 0.1)
+    b = boites.copy()
+    b[:, [0, 2]] -= pad_x
+    b[:, [1, 3]] -= pad_y
+    b /= gain
+    b[:, [0, 2]] = b[:, [0, 2]].clip(0, w_orig)
+    b[:, [1, 3]] = b[:, [1, 3]].clip(0, h_orig)
+    return b
+
+
+class Detecteur:
+    """Boîtes d'une image via une session ONNX Runtime.
+
+    `modele` est ce que renvoie :func:`charger_modele` (une session déjà
+    configurée sur le bon provider). L'API `detecter`/`detecter_lot` est
+    celle de la v2 : les faux détecteurs des tests et les outils
+    (mesurer_reference, verite_terrain) ne changent pas.
+    """
+
+    def __init__(self, modele, config: Config):
+        self.session = modele
+        self.config = config
+        self.input_name = modele.get_inputs()[0].name
+
+    # -- Prétraitement ----------------------------------------------------
+
+    def _preparer(self, img: np.ndarray) -> tuple[np.ndarray, tuple]:
+        """Image -> (tenseur, forme letterbox)."""
+        encadre, _r, _pad = _letterbox(img, self.config.taille_entree)
+        return _vers_tenseur(encadre), encadre.shape[:2]
+
+    def _sortie_vers_detections(
+        self, sortie: np.ndarray, forme_letterbox: tuple, forme_bande: tuple,
+        decalage: tuple[int, int],
+    ) -> list[Detection]:
+        """Sortie brute `(1|B, 5, N)` -> `Detection` en coordonnées PLEINES.
+
+        `sortie` : cx, cy, w, h, score (une classe) par ancre. Filtre de
+        confiance STRICT (`> seuil`, comme ultralytics), NMS IoU 0,7
+        (défaut historique — mesuré le 05/11 : toute autre valeur déplace
+        le décompte), max_det 300, remise à l'échelle vers l'image de la
+        bande puis décalage vers l'image PLEINE.
+        """
+        seuil = self.config.seuil_confiance
+        if sortie.ndim == 2:
+            # Passage unitaire : run()[0] donne (5, N) — on remet l'axe
+            # de lot pour que la boucle soit la même partout.
+            sortie = sortie[None]
+        detections: list[Detection] = []
+        for i in range(sortie.shape[0]):
+            s = sortie[i]
+            garde = s[4] > seuil
+            sc = s[4][garde]
+            if not sc.size:
+                continue
+            cx, cy = s[0][garde], s[1][garde]
+            wl, hl = s[2][garde] / 2, s[3][garde] / 2
+            boites = np.stack([cx - wl, cy - hl, cx + wl, cy + hl], axis=1)
+            garder = _nms(boites, sc.astype(np.float32), 0.7)[:300]
+            boites = boites[garder]
+            boites = _echelle_boites(
+                boites, forme_letterbox, (forme_bande[0], forme_bande[1])
+            )
+            for b, score in zip(boites.tolist(), sc[garder].tolist()):
+                # Filtrage de la Config appliqué ICI, même si le graphe est
+                # déjà paramétré : c'est la seule garantie que la valeur de
+                # `Config` fait autorité, quel que soit le modèle fourni.
+                largeur, hauteur = b[2] - b[0], b[3] - b[1]
+                if (
+                    largeur < self.config.taille_min_px
+                    or hauteur < self.config.taille_min_px
+                ):
+                    continue
+                if (
+                    self.config.classes_retenues is not None
+                    and 0 not in self.config.classes_retenues
+                ):
+                    continue
+                detections.append(
+                    Detection(
+                        x1=b[0] + decalage[0],
+                        y1=b[1] + decalage[1],
+                        x2=b[2] + decalage[0],
+                        y2=b[3] + decalage[1],
+                        score=score,
+                        class_id=0,
+                    )
+                )
+        return detections
+
+    # -- API publique ------------------------------------------------------
+
+    def detecter(
+        self, img: np.ndarray, bande: tuple[int, int, int, int] | None = None
+    ) -> list[Detection]:
+        """Boîtes de `img`, éventuellement restreintes à `bande`.
+
+        `bande` est un rectangle ``(x1, y1, x2, y2)`` en pixels de l'image
+        NATIVE, ou `None` pour analyser l'image entière. Les coordonnées
+        renvoyées sont toujours dans le repère de l'image pleine.
+        """
+        decalage_x = decalage_y = 0
+        if bande is not None:
+            x1, y1, x2, y2 = (int(v) for v in bande)
+            img = np.ascontiguousarray(img[y1:y2, x1:x2])
+            decalage_x, decalage_y = x1, y1
+        entree, forme_letterbox = self._preparer(img)
+        sortie = self.session.run(None, {self.input_name: entree})[0]
+        return self._sortie_vers_detections(
+            sortie, forme_letterbox, img.shape[:2], (decalage_x, decalage_y)
+        )
+
+    def detecter_lot(
+        self, imgs: list[np.ndarray], bande: tuple[int, int, int, int] | None = None
+    ) -> list[list[Detection]]:
+        """Détecte PLUSIEURS images en un appel modèle, sans changer le résultat.
+
+        `bande` est le MÊME rectangle pour tout le lot : la ligne est
+        verrouillée pendant une analyse, donc le décalage aussi. Même
+        contrat de sortie que `detecter`, par image : une liste de listes
+        de `Detection` en coordonnées de l'image pleine.
+        """
+        if len(imgs) == 1:
+            return [self.detecter(imgs[0], bande)]
+        decalage_x = decalage_y = 0
+        if bande is not None:
+            x1, y1, x2, y2 = (int(v) for v in bande)
+            imgs = [np.ascontiguousarray(i[y1:y2, x1:x2]) for i in imgs]
+            decalage_x, decalage_y = x1, y1
+        entrees = [self._preparer(i) for i in imgs]
+        entree = np.concatenate([e[0] for e in entrees])
+        forme_letterbox = entrees[0][1]
+        # PAS de [0] ici : la sortie du graphe batché est (B, 5, N) — le
+        # slicing par image ci-dessous a besoin de l'axe de lot.
+        sortie = self.session.run(None, {self.input_name: entree})
+        return [
+            self._sortie_vers_detections(
+                sortie[i : i + 1], forme_letterbox, imgs[i].shape[:2],
+                (decalage_x, decalage_y),
+            )
+            for i in range(len(imgs))
+        ]

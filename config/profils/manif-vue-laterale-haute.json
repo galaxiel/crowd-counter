@@ -1,5 +1,5 @@
 {
-  "modele": "tetes-medium-1280.pt",
+  "modele": "tetes-medium-1280.onnx",
   "seuil_confiance": 0.15,
   "taille_min_px": 3,
   "classes_retenues": null,
