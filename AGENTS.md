@@ -73,9 +73,9 @@ Avant de travailler, vérifier d'un coup :
 
 ## Tests
 
-- Porte de routine rapide : `python -m pytest tests/ -q -m "not slow"` (582 tests, ~10 s).
-- Suite complète (62 tests `slow` en plus : sous-processus `installer.py`, détection GPU réelle) :
-  `python -m pytest tests/ -q` — **644 tests, ~13 s, 0 échec** (vérifié le 06/11/2026, v3.0.1).
+- Porte de routine rapide : `python -m pytest tests/ -q -m "not slow"` (**655 tests, ~9 s, 0 échec**).
+- Suite complète (le seul test `slow` restant démarre un sous-processus complet et se saute sans GPU) :
+  `python -m pytest tests/ -q` — **655 passés, 1 sauté, 12-21 s selon la charge** (vérifié le 07/11/2026, v3.1.0).
   La suite ne fait aucune inférence (fausse session) : elle est lente par nature uniquement
   à cause des sous-processus.
 - CI GitHub Actions (`.github/workflows/tests.yml`) lance la passe rapide à chaque push :
