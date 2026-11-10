@@ -5,8 +5,62 @@ s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) ; les
 notes de release détaillées (anglais) accompagnent chaque version sur la
 [page des releases GitHub](https://github.com/galaxiel/crowd-counter/releases).
 
-Les poids `.pt` ne sont pas dans les archives : les modèles `tetes-*.pt`
-doivent être posés dans `modeles/` (voir le README).
+Les modèles livrés sont des graphes `.onnx` **inclus dans l'archive** (depuis la
+v3) ; les poids source `.pt` restent sur le poste de dev (export / fine-tuning)
+et ne sont pas dans les archives (voir le README).
+
+## [3.2.0] — 2026-11-10
+
+Refonte issue de l'audit lecture seule du 10/11 (12 bugs + robustesse) et de sa
+section 4 « interface ». Compte rendu détaillé : `docs/refonte-v3.2.0.md`. Le
+moteur de comptage est inchangé (matching IoU intact) ; la refonte porte sur
+l'exactitude écran↔moteur, l'honnêteté du bilan, le cycle de vie Qt, les modèles
+ONNX et l'interface. Suite : **734 passés, 1 sauté** (parité dev).
+
+### Ajouté
+
+- **Accordéon des réglages** : les six cartes deviennent un `QToolBox`, une
+  section ouverte à la fois, profils en tête, aide dépliable section par section.
+  Le panneau ne décide rien (il produit une `Config`).
+- **Pastille « modèle : trouvé / absent »** avant « Lancer », cliquable vers le
+  champ Modèle des réglages ; l'état remplace l'ancien texte `.pt`.
+- **Boutons « Copier le bilan » / « Enregistrer… »** en fin d'analyse : le
+  résultat n'existe plus seulement en RAM (presse-papiers, JSON + CSV).
+- **Cadenas « ligne verrouillée — réglages au prochain lancement »** sur la vidéo
+  pendant toute la session ; statut de pause explicite « ligne et sens verrouillés ».
+- **Validation des formes ONNX au chargement** : batch statique, sortie
+  multi-classe, canaux non RGB refusés avec un message d'export lisible, pas au
+  premier tick.
+
+### Corrigé
+
+- **Sens inversé en pause sans effet moteur** (compte faux invisible) : la
+  garde ne testait que le timer ; ligne et sens sont désormais verrouillés dès
+  la session ouverte et rappelés au moteur (`ajuster_ligne`) à chaque reconstruction.
+- **Réglages appliqués à chaud en pleine analyse** (total non reproductible) :
+  panneau gelé pendant toute la session, pause comprise.
+- **Frame illisible annoncée « Terminé »** : distinction fin de fichier / erreur
+  de décodage, bandeau « analyse incomplète ».
+- **« Secondes » = durée vidéo au lieu du temps de calcul** : l'avertissement
+  « analyse lente » peut enfin se déclencher ; avertissements de `statistiques()`
+  affichés dans le récap.
+- **Thread d'installation jamais arrêté** (crash Qt au ré-essai après annulation) :
+  `quit` sur échec/annulation/succès ; un seul bouton MAJ réutilisé.
+- **« Recommencer » ne se réactivait jamais** : `_une_analyse_faite` écrit à
+  l'arrêt d'une analyse engagée.
+- **Textes et glob `.pt` périmés** : conseils et liste en `.onnx` ; déposer un
+  `.pt` ne mène plus à un échec silencieux.
+- **Nom de profil non assaini** (traversée / OSError) ; **zip-slip** (filtre à
+  séparateur) ; **`nettoyer_anciennes`** effaçait tout `*.ancienne` voisin
+  (limité au nom exact de sauvegarde) ; **garde NaN** sur le fps ; `ErreurDisque`
+  lisible et `verifier_disque` appelé avant téléchargement ; journal fichier.
+
+### Modifié
+
+- **Bouton primaire contextuel** : « Lancer » au repos, « Pause »/« Reprendre »
+  pendant la session, « Recommencer » en fin d'analyse ; « Lancer » grisé en pause.
+- QSS des trois thèmes étendu aux nouveaux widgets (pastille, cadenas, onglets
+  d'accordéon, boutons de récap).
 
 ## [3.1.0] — 2026-11-06
 

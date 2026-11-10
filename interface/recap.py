@@ -26,18 +26,29 @@ rien d'autre.
 from __future__ import annotations
 
 import math
+import pathlib
 
 from PySide6.QtCore import QPointF, QRectF, Qt
 from PySide6.QtGui import QColor, QPainter, QPainterPath, QPen
 from PySide6.QtWidgets import (
+    QApplication,
+    QFileDialog,
     QGridLayout,
+    QHBoxLayout,
     QLabel,
+    QPushButton,
     QSizePolicy,
     QVBoxLayout,
     QWidget,
 )
 
-from compteur.rapport import FENETRE_DEBIT_S, statistiques
+from compteur.rapport import (
+    FENETRE_DEBIT_S,
+    csv_evenements,
+    json_bilan,
+    statistiques,
+    texte_bilan,
+)
 from compteur.types import Resultat
 
 #: Titre du bloc. Sobre : c'est un outil de travail, pas une application de
@@ -307,6 +318,17 @@ class PanneauRecap(QWidget):
         self.reglages.setWordWrap(True)
         racine.addWidget(self.reglages)
 
+        # Les avertissements de fiabilité, CALCULÉS par `statistiques` et
+        # affichés ici : « 0 compté » avec une foule présente n'est pas un
+        # résultat, c'est un défaut de comptage — l'opérateur doit le lire.
+        # Même robe ambre que le rappel de sens : un conseil appuyé, pas
+        # une erreur qui concurrencerait le flash rouge.
+        self.avertissements = QLabel("")
+        self.avertissements.setObjectName("avertissement")
+        self.avertissements.setWordWrap(True)
+        self.avertissements.setVisible(False)
+        racine.addWidget(self.avertissements)
+
         self.courbe = CourbeDebit()
         racine.addWidget(self.courbe, stretch=1)
 
@@ -315,13 +337,43 @@ class PanneauRecap(QWidget):
         self.legende.setWordWrap(True)
         racine.addWidget(self.legende)
 
+        # Le résultat ne doit pas disparaître avec la fenêtre : l'opérateur
+        # le copie ou l'enregistre. Les deux boutons sont morts tant qu'aucun
+        # résultat n'est affiché — copier un récap vide n'a pas de sens.
+        self._resultat: Resultat | None = None
+        boutons = QHBoxLayout()
+        boutons.setSpacing(8)
+        self.btn_copier = QPushButton("Copier le bilan")
+        self.btn_copier.setObjectName("bouton_recap")
+        self.btn_copier.setToolTip(
+            "Copie le bilan (total, durée, débit, pic, modèle, avertissements) "
+            "dans le presse-papiers, prêt à coller dans un rapport."
+        )
+        self.btn_copier.setEnabled(False)
+        self.btn_copier.clicked.connect(self._copier_bilan)
+        boutons.addWidget(self.btn_copier)
+        self.btn_enregistrer = QPushButton("Enregistrer…")
+        self.btn_enregistrer.setObjectName("bouton_recap")
+        self.btn_enregistrer.setToolTip(
+            "Enregistre deux fichiers : le bilan en JSON (les mêmes chiffres "
+            "que l'export) et les franchissements en CSV (frame, instant, "
+            "position, identité)."
+        )
+        self.btn_enregistrer.setEnabled(False)
+        self.btn_enregistrer.clicked.connect(self._enregistrer_bilan)
+        boutons.addWidget(self.btn_enregistrer)
+        boutons.addStretch(1)
+        racine.addLayout(boutons)
+
     # -- Remplissage ----------------------------------------------------
 
-    def afficher(self, resultat: Resultat) -> None:
+    def afficher(self, resultat: Resultat, avertissements=()) -> None:
         """Remplit les chiffres et la courbe à partir du `Resultat` brut.
 
         Les chiffres viennent de `rapport.statistiques` : l'écran et le JSON
-        d'export disent donc la même chose, calculés une seule fois.
+        d'export disent donc la même chose, calculés une seule fois. Les
+        avertissements de fiabilité sont affichés tels quels ; l'appelant
+        peut ajouter les siens (analyse incomplète) via ``avertissements``.
         """
         stats = statistiques(resultat)
         duree = float(stats["duree_s"] or 0.0)
@@ -337,6 +389,12 @@ class PanneauRecap(QWidget):
         )
         self.valeurs[LIBELLE_PIC].setText(self._texte_pic(resultat, pic, fenetre))
         self.courbe.definir_points(points_de_debit(resultat))
+        textes = list(stats["fiabilite"]["avertissements"]) + list(avertissements)
+        self.avertissements.setText("\n\n".join(textes))
+        self.avertissements.setVisible(bool(textes))
+        self._resultat = resultat
+        self.btn_copier.setEnabled(True)
+        self.btn_enregistrer.setEnabled(True)
 
     def definir_reglages(self, texte: str) -> None:
         """Affiche les réglages qui ont produit CE résultat, ou rien.
@@ -360,6 +418,36 @@ class PanneauRecap(QWidget):
         # serait extrapoler sur une minute qui n'a pas été observée.
         return f"{pic} pers / {int(round(fenetre))} s{ou}"
 
+    def _copier_bilan(self) -> None:
+        """Met le bilan texte dans le presse-papiers (demande opérateur)."""
+        if self._resultat is None:
+            return
+        QApplication.clipboard().setText(texte_bilan(self._resultat))
+
+    def _enregistrer_bilan(self) -> None:
+        """Écrit le bilan JSON et les franchissements CSV côte à côte.
+
+        Le chemin choisi nomme le JSON ; le CSV prend le même nom avec
+        l'extension `.csv`. Une boîte de dialogue annulée n'écrit rien.
+        L'écriture disque est ici, dans l'interface : `rapport` ne fait que
+        produire les chaînes, il ne touche plus au disque (moteur v3).
+        """
+        if self._resultat is None:
+            return
+        chemin, _ = QFileDialog.getSaveFileName(
+            self,
+            "Enregistrer le bilan",
+            "bilan.json",
+            "Bilan JSON (*.json);;Tous les fichiers (*)",
+        )
+        if not chemin:
+            return
+        cible = pathlib.Path(chemin)
+        cible.write_text(json_bilan(self._resultat), encoding="utf-8")
+        cible.with_suffix(".csv").write_text(
+            csv_evenements(self._resultat), encoding="utf-8"
+        )
+
     def effacer(self) -> None:
         """Remet le panneau à zéro et masque la courbe.
 
@@ -371,4 +459,9 @@ class PanneauRecap(QWidget):
             valeur.setText("—")
         self.reglages.setText("")
         self.reglages.setVisible(False)
+        self.avertissements.setText("")
+        self.avertissements.setVisible(False)
         self.courbe.definir_points([])
+        self._resultat = None
+        self.btn_copier.setEnabled(False)
+        self.btn_enregistrer.setEnabled(False)

@@ -37,8 +37,9 @@ def test_comparer_versions():
     assert mise_a_jour.comparer_versions("v2.6.0", "2.5.0") > 0
     assert mise_a_jour.comparer_versions("2.5.0", "2.6") < 0
     assert mise_a_jour.comparer_versions("2.6.0", "v2.6.0") == 0
-    # Une version incompréhensible côté serveur trie APRÈS : elle sera
-    # proposée plutôt que masquée.
+    # Une version incompréhensible trie AVANT une version valide (considérée
+    # plus ancienne). Sans effet réel : chercher_release filtre ces tags en
+    # amont, donc ce cas ne se présente pas en production.
     assert mise_a_jour.comparer_versions("demain", "2.5.0") < 0
 
 

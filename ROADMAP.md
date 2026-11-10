@@ -4,6 +4,24 @@
 les conventions de travail et l'interpréteur — ce fichier ne les répète pas,
 il les complète.
 
+## v3.2.0 — REFONTE AUDIT + UI (10/11/2026, LIVRÉE)
+
+Six lots issus de l'audit lecture seule du 10/11 (`D:\Bureau\Hermes_doc\audits\crowd-counter.md`,
+12 bugs + robustesse), décision opérateur « fait tout, y compris l'UI ». Compte rendu détaillé,
+bug par bug avec `fichier:ligne` et critère de validation : [`docs/refonte-v3.2.0.md`](refonte-v3.2.0.md).
+**Le moteur de comptage n'a pas changé de comportement** (matching IoU intact, batterie non rejouée
+car aucun candidat tracker ouvert) : la refonte porte sur l'exactitude ÉCRAN↔moteur, l'honnêteté du
+bilan, le cycle de vie Qt, les modèles ONNX et l'interface. Suite : **734 passés, 1 sauté** (parité dev).
+
+| Lot | Apport | Bugs |
+|---|---|---|
+| 1 — Cohérence moteur↔écran | Ligne/sens re-verrouillés et rappelés au moteur à chaque reconstruction ; réglages, ligne et sens gelés pendant toute la session (pause comprise) : « s'appliquent au prochain lancement ». | 1, 2, 3 |
+| 2 — Bilan honnête | Fin de fichier ≠ erreur de décodage (bandeau « analyse incomplète ») ; vrai temps de calcul dans `secondes`, durée vidéo dans `duree_video_s` ; avertissements de `statistiques()` affichés. | 4, 7, 8 |
+| 3 — Cycle de vie Qt & boutons | Thread d'installation quitté sur échec/annulation/succès ; un seul bouton MAJ réutilisé ; `_une_analyse_faite` écrit à l'arrêt → « Recommencer » s'active. | 5, 6, 9 |
+| 4 — Modèles & profils ONNX | Validation des formes entrée/sortie au chargement (batch statique, multi-classe, canaux) avec message d'export ; textes et glob `.onnx` ; nom de profil assaini. | 10, 11 |
+| 5 — Durcissement périphérie | Zip-slip à séparateur ; `verifier_disque` appelé + `ErreurDisque` lisible ; journal fichier ; garde NaN ; `nettoyer_anciennes` limité au nom exact de sauvegarde. | robustesse |
+| 6 — UI (section 4 de l'audit) | Accordéon des réglages (profils en tête) ; pastille modèle trouvé/absent cliquable ; états pause/analyse explicites + bouton primaire contextuel ; cadenas « ligne verrouillée » ; boutons Copier/Enregistrer le bilan ; QSS des 3 thèmes. | — |
+
 ## v3.0.0 — MOTEUR ONNX (06/11/2026, LIVRÉE)
 
 Le « majeur » au sens du versionnement du projet : **le contrat

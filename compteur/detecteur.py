@@ -163,6 +163,55 @@ def message_modele_absent(chemin: str) -> str:
     )
 
 
+def valider_formes(session) -> None:
+    """Refuse un graphe que le moteur ne peut pas compter correctement.
+
+    Le compteur analyse par LOTS (`detecter_lot` concatène jusqu'à 4 images)
+    et lit la sortie comme ``(B, 5, N)`` : cx, cy, w, h, score d'un modèle
+    tête unique. Deux graphes valides en apparence cassent ce contrat :
+
+    - batch FIGÉ (dimension d'entrée entière positive) : le lot de 4 est
+      refusé par le graphe à chaque tick — l'analyse ne démarre jamais ;
+    - sortie multi-classes (84 lignes pour COCO) : lire ``s[4]`` comme score
+      tombe par hasard sur une classe, le décompte est silencieusement faux.
+
+    Les dimensions symboliques (chaînes) ou inconnues (`None`) sont
+    dynamiques : acceptées. Seules les dimensions ENTIÈRES font foi.
+    """
+    entree = session.get_inputs()[0].shape
+    sortie = session.get_outputs()[0].shape
+    if len(entree) != 4:
+        raise ValueError(
+            f"entrée du modèle attendue à 4 dimensions (lot, canaux, H, W), "
+            f"reçu {len(entree)} : graphe non compatible."
+        )
+    batch = entree[0]
+    if isinstance(batch, int) and batch > 0:
+        raise ValueError(
+            f"batch figé à {batch} : le compteur analyse par lots de plusieurs "
+            "images. Réexporte le modèle avec un batch dynamique "
+            "(ultralytics : `dynamic=True`)."
+        )
+    canaux = entree[1]
+    if isinstance(canaux, int) and canaux != 3:
+        raise ValueError(
+            f"entrée à {canaux} canaux : le moteur attend une image RGB (3)."
+        )
+    if len(sortie) != 3:
+        raise ValueError(
+            f"sortie du modèle attendue à 3 dimensions (lot, 5, ancres), "
+            f"reçu {len(sortie)} : graphe non compatible."
+        )
+    lignes = sortie[1]
+    if isinstance(lignes, int) and lignes != 5:
+        raise ValueError(
+            f"sortie à {lignes} lignes : le compteur attend un modèle tête "
+            "unique (5 lignes : cx, cy, w, h, score). Un modèle multi-classes "
+            "(COCO, 80 classes) donnerait un décompte faux — exporte un modèle "
+            "entraîné sur une seule classe."
+        )
+
+
 def charger_modele(chemin: str, peripherique: str = PERIPHERIQUE_AUTO):
     """Charge un graphe `.onnx` via ONNX Runtime, provider demandé.
 
@@ -203,6 +252,7 @@ def charger_modele(chemin: str, peripherique: str = PERIPHERIQUE_AUTO):
         )
     else:
         log.info("périphérique de détection : %s", actif)
+    valider_formes(session)
     return session
 
 

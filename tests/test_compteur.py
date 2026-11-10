@@ -477,6 +477,33 @@ def test_analyser_video_sans_callback_ne_crashe_pas(monkeypatch):
     assert r.presents_moyen == pytest.approx(1.0)
 
 
+def test_analyser_video_fps_nan_replie_sur_25(monkeypatch):
+    """Un conteneur annonçant un fps NaN ne doit pas produire des timestamps NaN.
+
+    `cap.get(CAP_PROP_FPS) or 25.0` garde NaN (truthy) : les timestamps
+    `index / fps` deviennent NaN, exploitables nulle part (une courbe lève).
+    Le repli 25 i/s garde des timestamps finis.
+    """
+    import math
+
+    _installer_capture(monkeypatch, FauxCapture("nan.avi", fps=float("nan")))
+    config = Config(ligne=(320.0, 0.0, 320.0, 480.0), epaisseur_bande=20)
+    vues = []
+    r = analyser_video(
+        "nan.avi",
+        config,
+        callback_frame=vues.append,
+        detecteur=FauxDetecteur(),
+        tracker=FauxTracker([]),
+    )
+    assert vues, "les frames doivent être publiées même sans détection"
+    assert all(math.isfinite(f.timestamp_s) for f in vues)
+    assert [f.timestamp_s for f in vues] == pytest.approx(
+        [0.0, 0.04, 0.08, 0.12, 0.16, 0.20]
+    )
+    assert math.isfinite(r.duree_video_s)
+
+
 def test_analyser_video_construit_la_ligne_depuis_la_config(monkeypatch):
     """`sens` de la config doit atteindre la ligne.
 

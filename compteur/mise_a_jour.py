@@ -92,9 +92,10 @@ def comparer_versions(a: str, b: str) -> int:
     """Compare deux numéros de version. Négatif si a < b, 0 si égaux.
 
     Les composantes manquantes valent zéro : `2.6` == `2.6.0`. Une version
-    non analysable trie APRES toute version valide (elle est considérée
-    plus récente et sera proposée — un numéro incompréhensible côté serveur
-    ne doit pas masquer une mise à jour réelle).
+    non analysable trie AVANT toute version valide (considérée plus ancienne,
+    `a` invalide → -1). Sans effet en production : `chercher_release` filtre
+    ces tags en amont (`analyser_version(tag) is None` → None), donc une
+    version incompréhensible côté serveur n'atteint jamais cette comparaison.
     """
     va, vb = analyser_version(a), analyser_version(b)
     if va is None and vb is None:
@@ -180,13 +181,16 @@ def taille_libre(dossier: pathlib.Path) -> int:
 
 
 def verifier_disque(dossier: pathlib.Path, taille_zip: int) -> None:
-    """Lève `ErreurDisque` si le volume ne peut pas porter zip + extraction."""
+    """Lève `ErreurDisque` si le volume ne peut pas porter zip + extraction.
+
+    `ErreurDisque` attend un entier d'OCTETS manquants (il les formate en
+    Go) : lui passer une chaîne levait `TypeError`, et le message « espace
+    disque » ne pouvait pas exister.
+    """
     requis = int(taille_zip * (1 + MARGE_EXTRACTION))
     libre = taille_libre(dossier)
     if libre and libre < requis:
-        raise ErreurDisque(
-            f"{requis // (1024 * 1024)} Mo nécessaires, {libre // (1024 * 1024)} Mo libres"
-        )
+        raise ErreurDisque(requis - libre)
 
 
 def telecharger(
@@ -285,9 +289,15 @@ def dossier_application() -> pathlib.Path | None:
 
 
 def _membre_sur(extraction: pathlib.Path, membre: zipfile.ZipInfo) -> bool:
-    """Faux si un membre d'archive tente de sortir du dossier d'extraction."""
+    """Faux si un membre d'archive tente de sortir du dossier d'extraction.
+
+    `is_relative_to` et non `str.startswith` : sans séparateur, un dossier
+    FRÈRE partageant le préfixe (`…/foobar` pour `…/foo`) passait pour un
+    enfant et s'écrivait hors du dossier.
+    """
+    racine = extraction.resolve()
     cible = (extraction / membre.filename).resolve()
-    return str(cible).startswith(str(extraction.resolve()))
+    return cible.is_relative_to(racine)
 
 
 def extraire(zip_path: pathlib.Path, dossier: pathlib.Path, progression=None) -> None:
@@ -490,17 +500,20 @@ def nettoyer_anciennes(dossier_parent: pathlib.Path) -> list[str]:
     """Efface les restes d'un échange précédent. Appelé au démarrage de l'app.
 
     Deux familles : les dossiers d'étape `.maj-*` (tentative interrompue)
-    et les sauvegardes `*.ancienne` — leur présence au démarrage de la
-    NOUVELLE version prouve que celle-ci démarre, donc que la sauvegarde a
-    rempli son rôle. Best-effort : un dossier verrouillé (antivirus,
+    et la sauvegarde `CompteurManifestation.ancienne` — sa présence au
+    démarrage de la NOUVELLE version prouve que celle-ci démarre, donc que
+    la sauvegarde a rempli son rôle. Le nom est EXACT : un dossier personnel
+    « photos.ancienne » voisin dans le parent (installation sur le Bureau)
+    ne doit pas être effacé. Best-effort : un dossier verrouillé (antivirus,
     explorateur) reste en place et sera retenté au prochain démarrage.
     """
     supprimes: list[str] = []
     if not dossier_parent.is_dir():
         return supprimes
+    sauvegarde = f"{PROC_NOM}.ancienne"
     for element in dossier_parent.iterdir():
         nom = element.name
-        if not nom.startswith(".maj-") and not nom.endswith(".ancienne"):
+        if not nom.startswith(".maj-") and nom != sauvegarde:
             continue
         try:
             if element.is_dir():

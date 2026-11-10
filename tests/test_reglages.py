@@ -600,29 +600,42 @@ def test_aucun_encart_d_aide_n_est_visible_sans_clic(application):
 
 
 def test_le_bouton_aide_bascule_tous_les_encarts(application):
-    """Un clic déplie TOUT le documentation, un autre la replie.
+    """Un clic déplie TOUTE la documentation, un autre la replie.
 
     Un seul interrupteur, pas un bouton par réglage : l'opérateur ne choisit pas
     réglage par réglage, il demande « je lis la doc » ou « je règle ». Le libellé
     du bouton change avec l'état, pour qu'il n'y ait jamais à deviner si l'aide
     est ouverte.
+
+    Accordéon (lot 6) : une seule section est ouverte à la fois. Le drapeau
+    d'aide est posé sur TOUS les encarts (ils se révèlent quand on ouvre leur
+    section), mais seule la section ouverte les montre à l'écran. On vérifie
+    donc le drapeau partout (`isHidden`, indépendant de la page) et la
+    visibilité réelle dans une section ouverte pourvue d'encarts.
     """
     p = PanneauReglages(Config())
     p.show()
     application.processEvents()
     total = len(p._encarts)
+    assert total > 0
 
     p._btn_aide.click()
     application.processEvents()
     assert p.aide_visible()
     assert p._btn_aide.isChecked()
-    assert sum(1 for e in p._encarts if e.isVisible()) == total
+    assert sum(1 for e in p._encarts if not e.isHidden()) == total
     assert p._btn_aide.text().startswith("Masquer")
+    # « Détection » (index 1) a des encarts : ouverte, elle les montre vraiment.
+    p._accordeon.setCurrentIndex(1)
+    application.processEvents()
+    assert any(e.isVisible() for e in p._encarts), (
+        "la section ouverte doit montrer son aide dépliée"
+    )
 
     p._btn_aide.click()
     application.processEvents()
     assert not p.aide_visible()
-    assert sum(1 for e in p._encarts if e.isVisible()) == 0
+    assert sum(1 for e in p._encarts if not e.isHidden()) == 0
     assert p._btn_aide.text().startswith("Afficher")
 
 
@@ -644,13 +657,13 @@ def test_le_bouton_aide_ne_change_aucun_reglage(application):
 
 
 def test_le_panneau_tient_sans_defilement_aide_masquee(application):
-    """Aide masquée, le panneau doit tenir dans la zone disponible.
+    """Aide masquée, l'accordéon tient ; déplier l'aide grandit la section ouverte.
 
-    Mesuré : 984 px aide masquée contre 2138 px dépliée, pour 618 px de zone
-    dans une fenêtre de 850. La zone défilante reste donc nécessaire — la vidéo,
-    le compteur et la barre de boutons en mangent 232 px — mais le panneau n'est
-    plus un mur à faire défiler : on a retiré 1154 px de contenu affiché d'un
-    coup, sans retirer un mot d'explication.
+    Mesuré avant le lot 6 : 984 px aide masquée contre 2138 px dépliée, pour
+    618 px de zone — un mur à faire défiler. L'accordéon ne montre qu'une
+    section : le panneau tient d'un coup d'œil. Déplier l'aide ajoute les
+    encarts de la section OUVERTE ; on ouvre « Détection » (pourvue d'encarts)
+    pour le mesurer, « Profils » en tête n'en ayant pas.
     """
     from PySide6.QtWidgets import QScrollArea
 
@@ -663,13 +676,19 @@ def test_le_panneau_tient_sans_defilement_aide_masquee(application):
     zone = f.findChild(QScrollArea)
     assert zone is not None
     assert zone.widget() is f.panneau
+    # Ouvre une section pourvue d'encarts d'aide (profils en tête n'en a pas).
+    f.panneau._accordeon.setCurrentIndex(1)  # Détection
+    application.processEvents()
 
-    masque = f.panneau.sizeHint().height()
+    # L'accordéon se dimensionne sur sa page la plus haute : c'est la SECTION
+    # ouverte qui grandit quand l'aide se déplie, pas le panneau entier.
+    page = f.panneau._accordeon.currentWidget()
+    masque = page.sizeHint().height()
     f.panneau._btn_aide.click()
     application.processEvents()
-    deploie = f.panneau.sizeHint().height()
+    deploie = page.sizeHint().height()
 
-    assert masque < deploie, "déplier l'aide doit rendre le panneau plus haut"
+    assert masque < deploie, "déplier l'aide doit rendre la section ouverte plus haute"
     # Le bouton « Lancer » reste atteignable dans les deux états.
     assert f.btn_lancer.isVisible()
     assert f.btn_lancer.y() + f.btn_lancer.height() <= 850
@@ -728,14 +747,14 @@ def test_taille_entree_propose_1280(application):
     assert p.lire().taille_entree in (320, 640, 1280)
 
 
-def test_le_panneau_defile_dans_la_fenetre(application):
-    """Les explications ne doivent pas pousser les boutons hors de l'écran.
+def test_l_accordeon_tient_dans_la_zone_de_reglages(application):
+    """L'accordéon ne déborde plus : une section ouverte tient dans la zone.
 
-    La zone défilante reste nécessaire même aide masquée : mesuré, le panneau
-    fait 984 px masqué pour 618 px de zone dans une fenêtre de 850 — la vidéo, le
-    compteur et la barre de boutons en mangent 232. Ce qui a changé à la tâche 18
-    c'est que le contenu affiché par défaut est redevenu lisible d'un coup
-    d'œil, pas que la zone a disparu.
+    Avant le lot 6, le panneau de six cartes faisait 984 px pour 618 px de zone
+    et devait défiler — un mur qui pouvait pousser le compteur hors du champ.
+    L'accordéon ne montre qu'une section : il tient d'un coup d'œil. La zone
+    défilante est GARDÉE en filet de sécurité (aide dépliée, petite fenêtre),
+    mais le panneau n'est plus un mur et les boutons restent à l'écran.
     """
     from PySide6.QtWidgets import QScrollArea
 
@@ -746,11 +765,10 @@ def test_le_panneau_defile_dans_la_fenetre(application):
     f.show()
     application.processEvents()
     zone = f.findChild(QScrollArea)
-    assert zone is not None, "le panneau doit être dans une zone défilante"
+    assert zone is not None, "le panneau reste dans une zone défilante (filet)"
     assert zone.widget() is f.panneau
-    assert f.panneau.sizeHint().height() > zone.height(), (
-        "le panneau devrait réellement déborder : sans défilement, il serait "
-        "comprimé et les boutons hors de l'écran"
+    assert f.panneau.sizeHint().height() <= zone.height(), (
+        "l'accordéon doit tenir sans défilement : une seule section est ouverte"
     )
     # Le bouton de lancement doit rester dans la fenêtre.
     assert f.btn_lancer.y() + f.btn_lancer.height() <= 850

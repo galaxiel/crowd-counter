@@ -203,6 +203,30 @@ QLabel#libelle_reglage { color: #9aa3af; }
 QLabel#recap_titre { font-size: 14px; color: #9aa3af; letter-spacing: 1px; }
 QLabel#recap_libelle { color: #9ca3af; }
 QLabel#recap_valeur { color: #e6e6e6; }
+/* Pastille « Modèle » (lot 6) : verte si le modèle est trouvé, ambre s'il
+   est absent. Compacte et cliquable — elle mène au champ Modèle des réglages. */
+QPushButton#badge_modele {
+    padding: 6px 12px; border-radius: 12px; font-size: 12px;
+    background-color: #1b1f26; border: 1px solid #2b3038; color: #9aa3af;
+}
+QPushButton#badge_modele[trouve="true"] { color: #4ade80; border-color: #2f6b46; }
+QPushButton#badge_modele[trouve="false"] { color: #fbbf24; border-color: #6b5a2f; }
+/* Bandeau de verrou de session (lot 6), discret, sous la vidéo : la ligne
+   est figée et les réglages reportés au prochain lancement. */
+QLabel#verrou {
+    color: #9aa3af; font-size: 12px; background-color: #1b1f26;
+    border: 1px solid #2b3038; border-radius: 6px; padding: 4px 8px;
+}
+/* Accordéon des réglages (lot 6) : une section ouverte à la fois. L'en-tête
+   ouvert est plus clair ; les autres attendent, repliés. */
+QToolBox::tab {
+    background-color: #1b1f26; border: 1px solid #2b3038; border-radius: 6px;
+    color: #9aa3af; font-weight: 600; padding: 6px 10px;
+}
+QToolBox::tab:selected { color: #e6e6e6; background-color: #262a31; }
+/* Boutons du récapitulatif (lot 6) : secondaires et compacts — copier ou
+   enregistrer le bilan n'est pas l'action principale de l'écran. */
+QPushButton#bouton_recap { padding: 6px 14px; font-size: 12px; }
 QProgressBar {
     border: 1px solid #2b3038; border-radius: 6px; text-align: center; height: 20px;
 }
@@ -292,6 +316,22 @@ QLabel#libelle_reglage { color: #5b6472; }
 QLabel#recap_titre { font-size: 14px; color: #5b6472; letter-spacing: 1px; }
 QLabel#recap_libelle { color: #5f6673; }
 QLabel#recap_valeur { color: #1f2430; }
+QPushButton#badge_modele {
+    padding: 6px 12px; border-radius: 12px; font-size: 12px;
+    background-color: #ffffff; border: 1px solid #d3d7de; color: #5b6472;
+}
+QPushButton#badge_modele[trouve="true"] { color: #15803d; border-color: #15803d; }
+QPushButton#badge_modele[trouve="false"] { color: #b45309; border-color: #b45309; }
+QLabel#verrou {
+    color: #5f6673; font-size: 12px; background-color: #ffffff;
+    border: 1px solid #e3e7ec; border-radius: 6px; padding: 4px 8px;
+}
+QToolBox::tab {
+    background-color: #ffffff; border: 1px solid #e3e7ec; border-radius: 6px;
+    color: #5b6472; font-weight: 600; padding: 6px 10px;
+}
+QToolBox::tab:selected { color: #1f2430; background-color: #eceff3; }
+QPushButton#bouton_recap { padding: 6px 14px; font-size: 12px; }
 QProgressBar {
     border: 1px solid #e3e7ec; border-radius: 6px; text-align: center; height: 20px;
 }
@@ -381,6 +421,22 @@ QLabel#libelle_reglage { color: #94a3b8; }
 QLabel#recap_titre { font-size: 14px; color: #94a3b8; letter-spacing: 1px; }
 QLabel#recap_libelle { color: #94a3b8; }
 QLabel#recap_valeur { color: #e2e8f0; }
+QPushButton#badge_modele {
+    padding: 6px 12px; border-radius: 12px; font-size: 12px;
+    background-color: #16213a; border: 1px solid #2c3a52; color: #94a3b8;
+}
+QPushButton#badge_modele[trouve="true"] { color: #4ade80; border-color: #2f6b46; }
+QPushButton#badge_modele[trouve="false"] { color: #fbbf24; border-color: #6b5a2f; }
+QLabel#verrou {
+    color: #94a3b8; font-size: 12px; background-color: #16213a;
+    border: 1px solid #2c3a52; border-radius: 6px; padding: 4px 8px;
+}
+QToolBox::tab {
+    background-color: #16213a; border: 1px solid #2c3a52; border-radius: 6px;
+    color: #94a3b8; font-weight: 600; padding: 6px 10px;
+}
+QToolBox::tab:selected { color: #e2e8f0; background-color: #1e293b; }
+QPushButton#bouton_recap { padding: 6px 14px; font-size: 12px; }
 QProgressBar {
     border: 1px solid #2c3a52; border-radius: 6px; text-align: center; height: 20px;
 }

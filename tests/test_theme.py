@@ -154,6 +154,22 @@ def test_selecteurs_partages():
         assert "#bouton_aide" in feuille
 
 
+def test_selecteurs_lot6_partages():
+    """Les ajouts du lot 6 sont habillés dans LES TROIS thèmes.
+
+    Pastille modèle (verte trouvée / ambre absente), bandeau de verrou de
+    session, accordéon des réglages et boutons du récapitulatif : un widget
+    ne doit pas changer d'aspect selon le thème, sinon ce n'est plus un thème.
+    """
+    for feuille in STYLES.values():
+        assert "#badge_modele" in feuille
+        assert 'trouve="true"' in feuille
+        assert 'trouve="false"' in feuille
+        assert "#verrou" in feuille
+        assert "QToolBox::tab" in feuille
+        assert "#bouton_recap" in feuille
+
+
 def test_appliquer_style(application, fichier_theme):
     appliquer_style(application, "sombre")
     assert application.styleSheet() == STYLES["sombre"]

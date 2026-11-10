@@ -7,6 +7,7 @@ et demain par une éventuelle API web.
 from __future__ import annotations
 
 import logging
+import math
 import time
 from collections import deque
 from typing import Callable
@@ -503,7 +504,12 @@ def analyser_video(
     cap = cv2.VideoCapture(chemin_video)
     if not cap.isOpened():
         raise FileNotFoundError(f"vidéo illisible : {chemin_video}")
-    fps = cap.get(cv2.CAP_PROP_FPS) or 25.0
+    fps = cap.get(cv2.CAP_PROP_FPS)
+    # NaN est truthy : `nan or 25.0` gardait NaN, et `index / fps` produisait
+    # des timestamps NaN (conteneur muet, codec exotique, headless). Repli
+    # 25 i/s pour toute valeur absente, non finie ou négative.
+    if not fps or not math.isfinite(fps) or fps <= 0:
+        fps = 25.0
     total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
 
     debut = time.time()

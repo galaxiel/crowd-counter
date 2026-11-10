@@ -47,6 +47,9 @@ information, une clé absente n'en est pas une.
 
 from __future__ import annotations
 
+import csv
+import io
+import json
 from collections import Counter
 from statistics import median
 
@@ -57,11 +60,10 @@ from .types import Resultat
 #: une extrapoler supposerait un débit uniforme que rien ne mesure.
 FENETRE_DEBIT_S = 60.0
 
-#: En dessous de ce nombre d'images par seconde, la durée enregistrée est
-#: suspecte : `Resultat.secondes` vaut soit la durée de la vidéo (interface),
-#: soit le temps de calcul écoulé (`analyser_video`). Le second cas donne un
-#: débit par minute systématiquement sous-estimé — deux fois moins, si
-#: l'analyse a duré deux fois la vidéo.
+#: En dessous de ce nombre d'images par seconde, l'analyse a été plus lente
+#: que le temps réel de la vidéo : `Resultat.secondes` est le temps de CALCUL
+#: écoulé (interface et `analyser_video`), jamais la durée de la vidéo —
+#: c'est `duree_video_s` qui porte cette dernière.
 SEUIL_FPS_PLAUSIBLE = 5.0
 
 
@@ -118,14 +120,69 @@ def statistiques(resultat: Resultat) -> dict:
     }
 
 
+# -- Export optionnel (formatage seul, aucune écriture disque) -------------
+#
+# Le récapitulatif affiche ces chiffres ; l'opérateur peut en plus les copier
+# ou les enregistrer. Ces helpers ne font que FORMATER ce que `statistiques`
+# et les événements contiennent déjà : ils n'écrivent rien sur le disque
+# (c'est le rôle de l'interface) et n'inventent aucune mesure.
+
+
+def texte_bilan(resultat: Resultat) -> str:
+    """Bilan lisible pour le presse-papiers : les mêmes chiffres que le récap.
+
+    Les avertissements de fiabilité y figurent aussi : un bilan copié sans
+    eux publierait un chiffre que l'écran assortissait d'une réserve.
+    """
+    stats = statistiques(resultat)
+    lignes = [
+        "Compteur de manifestation — bilan",
+        f"Personnes comptées : {int(stats['total'] or 0)}",
+        f"Durée analysée : {stats['duree_s']} s",
+        f"Débit moyen : {stats['personnes_par_minute']} pers/min",
+        f"Pic de débit : {int(stats['debit_max_par_minute'] or 0)} "
+        f"sur {stats['debit_max_fenetre_s']} s",
+        f"Modèle : {stats['modele'] or '—'}",
+        f"Frames analysées : {int(stats['nb_frames'] or 0)}",
+    ]
+    avertissements = stats["fiabilite"]["avertissements"]
+    if avertissements:
+        lignes.append("")
+        lignes.extend(avertissements)
+    return "\n".join(lignes)
+
+
+def csv_evenements(resultat: Resultat) -> str:
+    """Une ligne par franchissement, en-tête toujours présent.
+
+    Un comptage nul donne un en-tête seul : le fichier dit « zéro passage »
+    par sa structure, pas par un fichier vide qu'on croirait tronqué.
+    """
+    tampon = io.StringIO()
+    writer = csv.writer(tampon)
+    writer.writerow(["frame", "timestamp_s", "x", "y", "track_id"])
+    for ev in resultat.evenements:
+        writer.writerow([ev.frame, ev.timestamp_s, ev.x, ev.y, ev.track_id])
+    return tampon.getvalue()
+
+
+def json_bilan(resultat: Resultat) -> str:
+    """Le bilan JSON : exactement `statistiques`, sérialisé tel quel."""
+    return json.dumps(statistiques(resultat), indent=2, ensure_ascii=False)
+
+
 def _fenetre_de_reel(resultat: Resultat) -> float:
     """Durée sur laquelle le pic de débit est observable, en secondes.
 
-    ``min(60, durée de l'analyse)`` : au-delà d'une minute, un pic se mesure
+    ``min(60, durée de la VIDÉO)`` : au-delà d'une minute, un pic se mesure
     toujours sur une minute ; en dessous, la vidéo entière est la seule
     fenêtre possible et le rapport doit le dire au lieu d'extrapoler.
+    La durée vidéo prime sur le temps de calcul : un GPU qui traite la vidéo
+    en un dixième de sa durée ne rétrécit pas la fenêtre d'observation.
     """
-    return min(FENETRE_DEBIT_S, float(resultat.secondes or 0.0))
+    duree_video = float(resultat.duree_video_s or 0.0)
+    duree = duree_video if duree_video > 0.0 else float(resultat.secondes or 0.0)
+    return min(FENETRE_DEBIT_S, duree)
 
 
 def _pic_de_debit(evenements: list, fenetre: float) -> int:

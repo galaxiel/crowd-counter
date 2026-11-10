@@ -73,18 +73,18 @@ Avant de travailler, vérifier d'un coup :
 
 ## Tests
 
-- Porte de routine rapide : `python -m pytest tests/ -q -m "not slow"` (**655 tests, ~9 s, 0 échec**).
-- Suite complète (le seul test `slow` restant démarre un sous-processus complet et se saute sans GPU) :
-  `python -m pytest tests/ -q` — **655 passés, 1 sauté, 12-21 s selon la charge** (vérifié le 07/11/2026, v3.1.0).
-  La suite ne fait aucune inférence (fausse session) : elle est lente par nature uniquement
-  à cause des sous-processus.
+- Porte de routine rapide : `python -m pytest tests/ -q -m "not slow"` (**734 tests, ~13 s, 0 échec**).
+- Suite complète : `python -m pytest tests/ -q` — **734 passés, 1 sauté, ~25 s** (vérifié le 10/11/2026, v3.2.0).
+  Le seul test `slow` est `test_detecteur.py::test_parcite_des_detections_contre_l_ancien_chemin_torch` :
+  parité ONNX↔torch, **dev uniquement** (exige torch+ultralytics, un graphe `tetes-medium-1280.onnx`
+  exporté et la vidéo de référence) — il se saute sur CI et machine neuve (`importorskip` + fichier absent).
+  La suite ne fait aucune inférence réelle (fausse session) : le saut est normal, pas une régression.
 - CI GitHub Actions (`.github/workflows/tests.yml`) lance la passe rapide à chaque push :
   Ubuntu, ONNX Runtime CPU (marqueur de plateforme dans requirements.txt), `QT_QPA_PLATFORM=offscreen`,
   `docs/BUILDING.md`. Elle ne valide pas le comptage, seulement la cohérence du code.
-- Un échec dans `tests/test_peripherique.py` en mode slow est presque toujours
-  l'**encodage de la console** : un sous-processus écrit des accents (« ÉCHEC ») en CP1252
-  sur une machine francophone. Le fix est `PYTHONIOENCODING=utf-8` côté enfant
-  (helper `_dry_run`), jamais `errors="replace"` côté parent.
+- **Encodage des sous-processus de test** : un enfant qui écrit des accents (« ÉCHEC »)
+  sur une machine francophone sort du CP1252 ; le fix est `PYTHONIOENCODING=utf-8` côté
+  enfant (helper `_dry_run`), jamais `errors="replace"` côté parent.
 - Des tracebacks qui citent un ancien nom de dossier (`crowd-counter-v2`) viennent de
   `__pycache__` périmés après un renommage : purger les `__pycache__` du dépôt
   (hors `venv-temp/`, `build-env/`), Python les régénère.
@@ -108,6 +108,18 @@ Avant de travailler, vérifier d'un coup :
 - Le chargement du modèle (v2.5) tourne dans un worker : toute logique qui doit être
   SYNCHRONE et certaine (validation d'un chemin de modèle) se fait **avant** de lancer le
   thread, pas dedans.
+- **Changer un `objectName` ou une propriété dynamique ne réapplique PAS le QSS tout seul** :
+  il faut `widget.style().unpolish(widget)` puis `polish(widget)`. Sans ça, le bouton primaire
+  change de nom mais garde l'ancien style (lot 6, `_maj_bouton_primaire` / pastille modèle).
+- **`QToolBox` (accordéon) dimensionne son `sizeHint` sur la page la PLUS HAUTE**, pas la page
+  courante : déplier l'aide ne change pas la hauteur du panneau entier. Pour mesurer l'effet
+  d'un encart, lire `accordeon.currentWidget().sizeHint()`, pas celui du panneau (lot 6).
+- **Tests Qt offscreen : `isVisible()` teste toute la chaîne d'ancêtres** (False si la fenêtre
+  n'est pas `show()`), alors que **`isHidden()` reflète le flag propre du widget**. Pour asserter
+  la visibilité d'un sous-widget sans afficher la fenêtre, utiliser `isHidden()` (lot 6, verrou).
+- **État de session à DEUX drapeaux** : `_en_analyse` (le timer tourne) vs `_session_ouverte`
+  (analyse engagée, non terminée, pause comprise). La pause ne lève que le premier. Les réglages,
+  la ligne et le sens sont gelés tant que `_session_ouverte` ; « s'appliquent au prochain lancement ».
 
 ## Configuration de référence
 

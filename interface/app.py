@@ -17,7 +17,7 @@ il ne réglait que le timer d'affichage, jamais celui du traitement.)
 ailleurs : la dupliquer ici rouvrirait le risque d'une ligne décalée, invisible
 à l'écran et qui ne se révèle qu'en comptant faux.
 
-**3. Rien de lourd au démarrage.** CUDA est présent et `tetes-medium.pt` met plusieurs
+**3. Rien de lourd au démarrage.** CUDA est présent et `tetes-medium.onnx` met plusieurs
 secondes à monter. Le modèle est chargé sur « Lancer », jamais dans
 `__init__` : la fenêtre s'ouvre immédiatement, l'opérateur trace sa ligne
 pendant que le GPU se réveille.
@@ -261,6 +261,13 @@ AVERTISSEMENT_SENS = (
     "du cortège ?"
 )
 
+#: Lecture arrêtée avant la fin ANNONCÉE de la vidéo (frame corrompue,
+#: fichier tronqué) : le total ne porte que sur la partie lue.
+AVERTISSEMENT_INCOMPLETE = (
+    "Analyse incomplète : la lecture s'est arrêtée à {frames} frames, avant "
+    "la fin annoncée de la vidéo. Le total ne porte que sur la partie lue."
+)
+
 
 class _ChargementModele(QObject):
     """Charge les poids HORS du fil de l'IHM.
@@ -371,6 +378,10 @@ class _InstallationMaj(QObject):
         try:
             self.etape.emit("Téléchargement de la nouvelle version…")
             zip_cible = self._dossier.parent / f".maj-{version}.zip"
+            # Le disque est vérifié AVANT de télécharger : inutile de remplir
+            # un volume qui ne pourra pas porter l'extraction. L'erreur part
+            # sur `echouee` (catch ErreurDisque ci-dessous), rien n'est écrit.
+            mise_a_jour.verifier_disque(self._dossier.parent, self._info["taille_zip"])
 
             def _prog(faits: int, total: int) -> None:
                 self.progression.emit(faits, total)
@@ -467,6 +478,13 @@ class FenetrePrincipale(QMainWindow):
         #: décompté du débit : 10 minutes d'arrêt ne doivent pas afficher un
         #: « 2 i/s » qui décrit l'inactivité de l'opérateur, pas le moteur.
         self._pause_debut: float | None = None
+        #: Temps de CALCUL de la dernière analyse, pauses déduites. Figé par
+        #: `arreter()` avant l'effacement de l'horloge : c'est lui, et non la
+        #: durée de la vidéo, qui va dans `Resultat.secondes`.
+        self._secondes_calcul = 0.0
+        #: La lecture s'est arrêtée avant le nombre de frames annoncé :
+        #: frame corrompue ou fichier tronqué, PAS une fin normale.
+        self._analyse_incomplete = False
         #: Un chargement de modèle tourne dans son thread. Drapeau
         #: d'unicité : un second « Lancer » pendant ce temps est ignoré,
         #: et l'activation des boutons s'y aligne (Stop reste actif —
@@ -534,6 +552,9 @@ class FenetrePrincipale(QMainWindow):
         self._thread_maj: QThread | None = None
         self._worker_maj: QObject | None = None
         self._dialogue_maj: QProgressDialog | None = None
+        #: Bouton « Nouvelle version » : créé à la première découverte, puis
+        #: RÉUTILISÉ — une vérification ne doit pas empiler un second bouton.
+        self.btn_maj: QPushButton | None = None
 
         self._construire()
         self._connecter()
@@ -562,6 +583,19 @@ class FenetrePrincipale(QMainWindow):
         self.video.setMinimumWidth(760)
         colonne_video = QVBoxLayout()
         colonne_video.addWidget(self.video, stretch=1)
+
+        # Cadenas discret : pendant une session (analyse OU pause), la ligne
+        # et le sens sont figés et les réglages ne s'appliquent qu'au prochain
+        # lancement. Le dire sous la vidéo évite que l'opérateur clique pour
+        # déplacer une ligne qui refuserait, ou change un réglage sans effet.
+        # Masqué hors session : il ne prendrait pas de place pour rien.
+        self.label_verrou = QLabel(
+            "Ligne verrouillée — réglages au prochain lancement"
+        )
+        self.label_verrou.setObjectName("verrou")
+        self.label_verrou.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.label_verrou.setVisible(False)
+        colonne_video.addWidget(self.label_verrou)
 
         self.barre_progression = QProgressBar()
         self.barre_progression.setFormat("%v / %m frames (%p %)")
@@ -735,6 +769,25 @@ class FenetrePrincipale(QMainWindow):
             self.btn_recommencer,
         ):
             barre.addWidget(b)
+
+        # Libellé PERMANENT du modèle : l'opérateur voit quel modèle va
+        # tourner sans ouvrir les réglages ni charger une vidéo. Avant ce
+        # lot, l'information n'existait que dans le statut (après ouverture
+        # d'une vidéo) ou dans le panneau — invisible au moment de lancer.
+        # Pastille cliquable : un clic amène au champ « Modèle » des réglages.
+        # QPushButton (et non QLabel) pour porter le geste ; la QSS lui donne
+        # une robe de pastille, verte si le modèle est trouvé, ambre sinon.
+        self.label_modele = QPushButton("")
+        self.label_modele.setObjectName("badge_modele")
+        self.label_modele.setFlat(True)
+        self.label_modele.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.label_modele.setToolTip(
+            "Modèle que « Lancer » utilisera. Vert : trouvé sur le poste. "
+            "Ambre : absent — clique pour le choisir dans les réglages."
+        )
+        self.label_modele.clicked.connect(self._on_badge_modele)
+        barre.addWidget(self.label_modele)
+        self._maj_label_modele()
 
         # Choix du thème (sombre / clair / suivre le système), en bout de
         # barre de boutons. Ce n'est PAS un réglage du panneau : le panneau
@@ -946,11 +999,17 @@ class FenetrePrincipale(QMainWindow):
             )
             url = info.get("url_page", "")
             action = lambda _=False: QDesktopServices.openUrl(QUrl(url))  # noqa: E731
-        self.btn_maj = QPushButton(texte)
-        self.btn_maj.setObjectName("maj_disponible")
+        if self.btn_maj is None:
+            self.btn_maj = QPushButton()
+            self.btn_maj.setObjectName("maj_disponible")
+            self._barre_boutons.addWidget(self.btn_maj)
+        else:
+            # Une seule action à la fois : la version précédente ne doit
+            # plus être installable depuis un clic destiné à la nouvelle.
+            self.btn_maj.clicked.disconnect()
+        self.btn_maj.setText(texte)
         self.btn_maj.setToolTip(pourpointe)
         self.btn_maj.clicked.connect(action)
-        self._barre_boutons.addWidget(self.btn_maj)
 
     def _installer_maj(self, info: dict) -> None:
         """Confirme, puis pilote l'installation (thread + dialogue modal).
@@ -962,6 +1021,10 @@ class FenetrePrincipale(QMainWindow):
         """
         dossier = mise_a_jour.dossier_application()
         if dossier is None:
+            return
+        if self._thread_maj is not None and self._thread_maj.isRunning():
+            # Écraser un QThread encore vivant le détruirait en marche :
+            # crash Qt. L'opérateur réessaiera quand le thread aura fini.
             return
         taille_mo = max(1, self._info_mo(info))
         reponse = QMessageBox.question(
@@ -994,6 +1057,13 @@ class FenetrePrincipale(QMainWindow):
         self._worker_maj.progression.connect(self._maj_progression)
         self._worker_maj.etape.connect(dialogue.setLabelText)
         self._worker_maj.echouee.connect(self._maj_echouee)
+        # Le thread doit QUITTER sur les deux issues : sans cela il reste
+        # vivant après un échec, la vérification manuelle est bloquée « déjà
+        # en cours » pour toujours, et réessayer détruirait un QThread vivant.
+        # `quit` est connecté AVANT `_maj_prete` : la fermeture demandée par
+        # ce slot trouve un thread déjà en sortie, pas une attente de 15 s.
+        self._worker_maj.echouee.connect(self._thread_maj.quit)
+        self._worker_maj.prete.connect(self._thread_maj.quit)
         self._worker_maj.prete.connect(self._maj_prete)
         dialogue.canceled.connect(self._worker_maj.annuler)
         self._thread_maj.start()
@@ -1282,7 +1352,7 @@ class FenetrePrincipale(QMainWindow):
         """Ligne ajoutée au statut : le modèle choisi est-il déjà sur le disque ?
 
         Le contrôle a lieu AU CHARGEMENT DE LA VIDÉO et non au lancement :
-        sans lui, un `.pt` absent ne se révélait qu'après que l'opérateur a
+        sans lui, un `.onnx` absent ne se révélait qu'après que l'opérateur a
         ouvert la vidéo, tracé la ligne et cliqué « Lancer » — pour se voir
         refuser le décompte, en conservant certes la vidéo et la ligne, mais
         après tout le travail de préparation.
@@ -1290,7 +1360,7 @@ class FenetrePrincipale(QMainWindow):
         Trois états, et un seul est bon : trouvé ; introuvable alors que des
         poids existent (un nom tapé à la main, un fichier déplacé) ; aucun
         poids sur tout le poste — le cas d'une installation neuve, où le
-        dépôt ne contient pas les `.pt` et où rien n'indiquait jusque-là où
+        dépôt ne contient pas les `.onnx` et où rien n'indiquait jusque-là où
         les déposer.
         """
         modele = self.config.modele
@@ -1302,11 +1372,11 @@ class FenetrePrincipale(QMainWindow):
             p.name
             for dossier in dossiers_modeles()
             if dossier.is_dir()
-            for p in sorted(dossier.glob("*.pt"))
+            for p in sorted(dossier.glob("*.onnx"))
         ]
         if not poids:
             return (
-                "\nAucun modèle sur ce poste : dépose un fichier .pt dans le "
+                "\nAucun modèle sur ce poste : dépose un fichier .onnx dans le "
                 "dossier « modeles/ », puis choisis-le dans les réglages."
             )
         ou = "un modèle" if len(poids) == 1 else f"{len(poids)} modèles"
@@ -1391,6 +1461,9 @@ class FenetrePrincipale(QMainWindow):
         self.label_debit.clear()
         self.label_debit.setVisible(False)
         self._nb_frames_video = 0
+        # « Recommencer » appartient à la vidéo PRÉCÉDENTE : sur cette
+        # nouvelle scène, aucun essai n'a encore eu lieu.
+        self._une_analyse_faite = False
         self.maj_compteurs(0, 0, 0)
 
     def _afficher_premiere_frame(self) -> None:
@@ -1555,7 +1628,7 @@ class FenetrePrincipale(QMainWindow):
         est verrouillée, `Ligne.deplacer` refuserait le déplacement, et le
         glisser doit être INOPÉRANT, pas planté. `None` aussi sans ligne.
         """
-        if self.ligne is None or self._en_analyse or self.ligne.verrouillee:
+        if self.ligne is None or self._session_ouverte or self.ligne.verrouillee:
             return None
         # Les dimensions sont celles de l'image AFFICHÉE, pas d'une lecture
         # vidéo : c'est elle que l'opérateur clique, donc elle seule donne un
@@ -1584,7 +1657,7 @@ class FenetrePrincipale(QMainWindow):
         second état puisse diverger. C'est aussi pourquoi on n'arme pas de
         copie de bande ici : il n'y en a pas.
         """
-        if self.ligne is None or self._en_analyse or self.ligne.verrouillee:
+        if self.ligne is None or self._session_ouverte or self.ligne.verrouillee:
             return
         if self._ligne_avant_glissement is None:
             self._ligne_avant_glissement = (self.ligne.p1, self.ligne.p2)
@@ -1737,7 +1810,9 @@ class FenetrePrincipale(QMainWindow):
             self._maj_peripherique(config)
 
         self.config = config
+        self._maj_label_modele()
         if self.ligne is not None:
+            verrou = self.ligne.verrouillee
             try:
                 self.ligne = Ligne(
                     self.ligne.p1,
@@ -1753,6 +1828,11 @@ class FenetrePrincipale(QMainWindow):
                 # l'ancienne ligne plutôt que de laisser le moteur sans ligne,
                 # qui ne compterait plus personne.
                 log.warning("réglage de ligne refusé : %s", exc)
+            else:
+                if verrou:
+                    self.ligne.verrouiller()
+                if self._session_ouverte and self.compteur is not None:
+                    self.compteur.ajuster_ligne(self.ligne)
         if self.compteur is not None:
             self.compteur.config = config
         # Un changement de périphérique lâche le détecteur comme un changement
@@ -1822,10 +1902,10 @@ class FenetrePrincipale(QMainWindow):
         """Valide le modèle, puis le charge dans un thread.
 
         La validation est la MÊME que celle de `charger_modele`
-        (`resoudre_modele`, sans torch ni ultralytics) : un `.pt` absent ou
+        (`resoudre_modele`, sans torch ni ultralytics) : un `.onnx` absent ou
         un nom tapé à la main est dit tout de suite, en synchrone, avec le
         message exact que le chargement aurait levé. Seul le chargement
-        lourd — lecture des poids + mise en mémoire torch — part en thread.
+        lourd — lecture du graphe + session ONNX Runtime — part en thread.
         """
         modele, peripherique = self.config.modele, self.config.peripherique
         if resoudre_modele(modele) is None:
@@ -1984,6 +2064,9 @@ class FenetrePrincipale(QMainWindow):
         # une pause NE le réarme pas : sans cela, chaque reprise en pause le
         # ferait clignoter, alors que l'opérateur n'a pas relancé d'analyse.
         self._avertissement_sens_affiche = False
+        # Nouvelle analyse : le verdict « incomplète » de la précédente ne
+        # doit pas survivre à un Stop volontaire sur celle-ci.
+        self._analyse_incomplete = False
         # Le récapitulatif de l'analyse PRÉCÉDENTE disparaît ici. Le laisser en
         # place pendant qu'un nouveau décompte démarre ferait lire l'ancien
         # total et l'ancienne courbe comme s'ils étaient en cours.
@@ -2013,7 +2096,13 @@ class FenetrePrincipale(QMainWindow):
         return (self.ligne.p1[0], self.ligne.p1[1], self.ligne.p2[0], self.ligne.p2[1])
 
     def _reconstruire_ligne_depuis_config(self) -> None:
-        """Réapplique les réglages du panneau à la ligne existante."""
+        """Réapplique les réglages du panneau à la ligne existante.
+
+        Session ouverte, le verrou SURVIT à la reconstruction et le moteur
+        reçoit la nouvelle ligne : sans cela, l'écran montrerait une ligne
+        déplaçable pendant que le moteur compterait encore sur l'ancienne.
+        """
+        verrou = self.ligne.verrouillee
         try:
             self.ligne = Ligne(
                 self.ligne.p1,
@@ -2027,6 +2116,11 @@ class FenetrePrincipale(QMainWindow):
         except ValueError as exc:
             self._signaler("Ligne invalide", str(exc), grave=True)
             self.ligne = None
+            return
+        if verrou:
+            self.ligne.verrouiller()
+        if self._session_ouverte and self.compteur is not None:
+            self.compteur.ajuster_ligne(self.ligne)
 
     def _ouvrir_session(self) -> None:
         """Passe en « analyse lancée » : traitement actif, commandes actives.
@@ -2041,6 +2135,7 @@ class FenetrePrincipale(QMainWindow):
         self._en_analyse = True
         self._session_ouverte = True
         self.btn_pause.setText("Pause")
+        self._maj_boutons()
 
     def _basculer_pause(self) -> None:
         if self._en_analyse:
@@ -2048,7 +2143,7 @@ class FenetrePrincipale(QMainWindow):
             self._en_analyse = False
             self._pause_debut = time.monotonic()
             self.btn_pause.setText("Reprendre")
-            self.label_statut.setText("En pause.")
+            self.label_statut.setText("En pause — ligne et sens verrouillés.")
         elif self._session_ouverte and self.compteur is not None:
             if self._debut_analyse is not None and self._pause_debut is not None:
                 # La pause est RETIRÉE de l'horloge du débit : en décalant le
@@ -2060,6 +2155,18 @@ class FenetrePrincipale(QMainWindow):
             self._ouvrir_session()
             self.label_statut.setText("Analyse en cours…")
         self._maj_boutons()
+
+    def _temps_calcul_s(self) -> float:
+        """Temps de calcul écoulé, pause en cours déduite.
+
+        L'arrêt peut tomber PENDANT la pause : le temps figé est alors celui
+        du début de pause, pas celui de l'arrêt — l'opérateur n'a rien calculé
+        entre les deux.
+        """
+        if self._debut_analyse is None:
+            return 0.0
+        fin = self._pause_debut if self._pause_debut is not None else time.monotonic()
+        return max(0.0, fin - self._debut_analyse)
 
     def arreter(self) -> None:
         """Ferme la session d'analyse et rend la main à l'opérateur.
@@ -2075,6 +2182,10 @@ class FenetrePrincipale(QMainWindow):
         cas où aucune analyse n'a eu lieu et où il n'y a rien à résumer.
         """
         analyse_engagee = self._session_ouverte
+        if analyse_engagee:
+            # « Recommencer » n'a de sens qu'après un premier essai : c'est
+            # l'arrêt d'une analyse engagée qui le rend vrai, pas le lancement.
+            self._une_analyse_faite = True
         # Un chargement de modèle en route s'arrête aussi : plus rien
         # n'attend son résultat (le prochain « Lancer » en relancera un,
         # ou réarmera celui-ci s'il n'est pas fini).
@@ -2091,7 +2202,9 @@ class FenetrePrincipale(QMainWindow):
         self._session_ouverte = False
         # L'estimation du temps restant n'a plus de sens une fois l'analyse
         # arrêtée : le label se vide et la horloge s'éteint — un « reste ≈
-        # 40 s » laissé affiché après un Stop mentirait.
+        # 40 s » laissé affiché après un Stop mentirait. Le temps de calcul
+        # est figé AVANT l'effacement : le bilan en a besoin.
+        self._secondes_calcul = self._temps_calcul_s()
         self._debut_analyse = None
         self._pause_debut = None
         self.label_debit.clear()
@@ -2111,7 +2224,10 @@ class FenetrePrincipale(QMainWindow):
             return
         try:
             resultat = self.compteur.resultat(
-                self.config.modele, self.frames, self.frames / self._fps()
+                self.config.modele,
+                self.frames,
+                self._secondes_calcul,
+                duree_video_s=self.frames / self._fps(),
             )
         except TypeError:
             # Un compteur de test peut ne pas accepter la durée vidéo : le
@@ -2128,7 +2244,10 @@ class FenetrePrincipale(QMainWindow):
             f"{self.config.frames_confirmation} f · Analyse : "
             f"{self.config.taille_entree} px"
         )
-        self.recap.afficher(resultat)
+        extra = ()
+        if self._analyse_incomplete:
+            extra = (AVERTISSEMENT_INCOMPLETE.format(frames=self.frames),)
+        self.recap.afficher(resultat, avertissements=extra)
         self.recap.setVisible(True)
 
     def _libelle_sens(self) -> str:
@@ -2157,9 +2276,10 @@ class FenetrePrincipale(QMainWindow):
         ligne qui décide quel côté est « départ ») : les deux sont mis à
         jour ensemble, et la vue est redessinée — la flèche verte pivote
         sous les yeux de l'opérateur, aucune ambiguïté possible.
-        Interdit pendant l'analyse : la ligne y est verrouillée.
+        Interdit dès que la session est ouverte, pause comprise : la ligne
+        y est verrouillée.
         """
-        if self._en_analyse or self._chargement_en_cours:
+        if self._session_ouverte or self._chargement_en_cours:
             return
         self.config.sens = -int(self.config.sens or 1)
         self.panneau.definir_sens(self.config.sens)
@@ -2170,6 +2290,34 @@ class FenetrePrincipale(QMainWindow):
         self.label_statut.setText(
             f"Sens de comptage : {self._libelle_sens()}"
         )
+
+    def _maj_label_modele(self) -> None:
+        """Libellé permanent : le modèle que « Lancer » utilisera.
+
+        Reflète `config.modele` à chaque changement de config — l'opérateur
+        n'a pas à ouvrir les réglages pour savoir quel modèle tourne. La
+        propriété dynamique `trouve` porte l'état trouvé/absent : la QSS
+        colore la pastille en vert (modèle présent) ou ambre (absent).
+        """
+        nom = self.config.modele or "—"
+        self.label_modele.setText(f"Modèle : {nom}")
+        trouve = (
+            bool(self.config.modele)
+            and resoudre_modele(self.config.modele) is not None
+        )
+        self.label_modele.setProperty("trouve", trouve)
+        self.label_modele.style().unpolish(self.label_modele)
+        self.label_modele.style().polish(self.label_modele)
+
+    def _on_badge_modele(self) -> None:
+        """Clic sur la pastille : amène au champ « Modèle » des réglages.
+
+        Ignoré quand le panneau est verrouillé (session ouverte, pause
+        comprise) : on ne change pas de modèle en cours d'analyse.
+        """
+        if not self.panneau.isEnabled():
+            return
+        self.panneau.focus_modele()
 
     def _maj_boutons(self) -> None:
         """Une seule source de vérité pour l'activation des boutons.
@@ -2186,20 +2334,48 @@ class FenetrePrincipale(QMainWindow):
         # qu'on annule un chargement.
         chargement = self._chargement_en_cours
         self.btn_video.setEnabled(not self._en_analyse and not chargement)
-        self.btn_ligne.setEnabled(video and not self._en_analyse and not chargement)
-        self.btn_sens.setEnabled(video and not self._en_analyse and not chargement)
-        self.btn_lancer.setEnabled(pret and not self._en_analyse and not chargement)
+        # Sens, tracé et panneau sont figés dès la SESSION OUVERTE, pause
+        # comprise : les changer en pause divergerait du moteur, qui garde
+        # sa ligne et ses réglages jusqu'à Stop.
+        self.btn_ligne.setEnabled(video and not self._session_ouverte and not chargement)
+        self.btn_sens.setEnabled(video and not self._session_ouverte and not chargement)
+        self.panneau.setEnabled(not self._session_ouverte)
+        self.btn_lancer.setEnabled(pret and not self._session_ouverte and not chargement)
         # « Recommencer » n'a de sens qu'APRÈS un premier essai : avant,
         # il serait un second « Lancer » sans rien dire de plus.
         self.btn_recommencer.setEnabled(
             pret
-            and not self._en_analyse
+            and not self._session_ouverte
             and not chargement
             and self._une_analyse_faite
         )
         self.btn_pause.setEnabled(self._session_ouverte)
         self.btn_stop.setEnabled(self._session_ouverte or chargement)
+        self.label_verrou.setVisible(self._session_ouverte)
         self._maj_libelle_sens()
+        self._maj_bouton_primaire()
+
+    def _maj_bouton_primaire(self) -> None:
+        """Déplace la robe bleue « primaire » vers le geste attendu.
+
+        Repos → « Lancer » ; session ouverte (analyse OU pause) →
+        « Pause/Reprendre » ; analyse finie → « Recommencer ». Un seul
+        bouton la porte : deux boutons bleus concurrenceraient l'action.
+        Changer l'objectName exige de repolir le widget, sans quoi la QSS
+        garde l'ancienne robe.
+        """
+        if self._session_ouverte:
+            attendu = self.btn_pause
+        elif self._une_analyse_faite and self.btn_recommencer.isEnabled():
+            attendu = self.btn_recommencer
+        else:
+            attendu = self.btn_lancer
+        for bouton in (self.btn_lancer, self.btn_pause, self.btn_recommencer):
+            nom = "primaire" if bouton is attendu else ""
+            if bouton.objectName() != nom:
+                bouton.setObjectName(nom)
+                bouton.style().unpolish(bouton)
+                bouton.style().polish(bouton)
 
     # -- Boucle de lecture ------------------------------------------------
 
@@ -2227,6 +2403,13 @@ class FenetrePrincipale(QMainWindow):
             self.frames += 1
 
         if not lot:
+            # Une frame illisible ARRÊTE la lecture comme une fin de vidéo :
+            # OpenCV ne distingue pas les deux. Le conteneur, lui, annonce un
+            # nombre de frames — s'il n'est pas atteint, l'analyse est
+            # tronquée et le bilan doit le dire au lieu d'annoncer « Terminé ».
+            self._analyse_incomplete = (
+                self._nb_frames_video > 0 and self.frames < self._nb_frames_video
+            )
             self.arreter()
             self._afficher_bilan()
             return
@@ -2495,12 +2678,19 @@ class FenetrePrincipale(QMainWindow):
         if self.compteur is None:
             return
         resultat = self.compteur.resultat(
-            self.config.modele, self.frames, self.frames / self._fps()
+            self.config.modele,
+            self.frames,
+            self._secondes_calcul,
+            duree_video_s=self.frames / self._fps(),
         )
-        minutes = max(1e-9, resultat.secondes / 60.0)
+        # Le débit est celui de la VIDÉO (personnes par minute de cortège),
+        # jamais celui du temps de calcul — un GPU rapide gonflerait le chiffre.
+        duree = resultat.duree_video_s or resultat.secondes
+        minutes = max(1e-9, duree / 60.0)
         par_minute = resultat.total / minutes
+        titre = "Analyse incomplète" if self._analyse_incomplete else "Terminé"
         self.label_statut.setText(
-            f"Terminé — {resultat.total} personnes, "
+            f"{titre} — {resultat.total} personnes, "
             f"{par_minute:.1f}/min, "
             f"max {resultat.presents_max} présents, "
             f"{resultat.presents_moyen:.1f} en moyenne."

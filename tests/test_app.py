@@ -251,7 +251,7 @@ class FauxCompteur:
             evenements=nouveaux,
         )
 
-    def resultat(self, modele, nb_frames, secondes):
+    def resultat(self, modele, nb_frames, secondes, duree_video_s=0.0):
         from compteur.types import Resultat
 
         return Resultat(
@@ -261,6 +261,7 @@ class FauxCompteur:
             nb_frames=nb_frames,
             presents_max=3,
             secondes=secondes,
+            duree_video_s=duree_video_s,
         )
 
 
@@ -1128,7 +1129,7 @@ def test_charger_video_signale_un_modele_absent_avant_le_lancer(
     """Le nom n'existe nulle part : dit-le DÈS l'ouverture de la vidéo.
 
     Les dossiers de modèles sont patchés sur un `tmp_path` contenant un
-    `.pt` : le test doit afficher « introuvable » partout, y compris sur une
+    `.onnx` : le test doit afficher « introuvable » partout, y compris sur une
     machine CI sans aucun poids — sinon le message basculerait vers celui
     d'une installation neuve et le test ne vérifierait plus la même branche.
     """
@@ -1136,21 +1137,21 @@ def test_charger_video_signale_un_modele_absent_avant_le_lancer(
 
     poids = tmp_path / "modeles"
     poids.mkdir()
-    (poids / "present.pt").write_bytes(b"")
+    (poids / "present.onnx").write_bytes(b"")
     monkeypatch.setattr(module_app, "dossiers_modeles", lambda: (poids,))
     f = fenetre
-    f.panneau._modele.setCurrentText("fichier_absent_xyz.pt")
+    f.panneau._modele.setCurrentText("fichier_absent_xyz.onnx")
     assert f.charger_video(str(video_synthetique)) is True  # la vidéo s'ouvre
     statut = f.label_statut.text()
-    assert "fichier_absent_xyz.pt" in statut
+    assert "fichier_absent_xyz.onnx" in statut
     assert "introuvable" in statut.lower()
     assert f.cap is not None, "la vidéo ne doit pas être refusée pour un modèle"
 
 
-def test_charger_video_dit_ou_deposer_un_pt_sur_une_installation_neuve(
+def test_charger_video_dit_ou_deposer_un_onnx_sur_une_installation_neuve(
     application, fenetre, video_synthetique, monkeypatch
 ):
-    """Aucun `.pt` sur tout le poste : le message dit OÙ déposer les poids.
+    """Aucun `.onnx` sur tout le poste : le message dit OÙ déposer les poids.
 
     C'est le cas d'une installation neuve — le dépôt ne versionne pas les
     poids (`.gitignore`), et rien n'indiquait jusque-là où les mettre.
@@ -1159,11 +1160,12 @@ def test_charger_video_dit_ou_deposer_un_pt_sur_une_installation_neuve(
 
     monkeypatch.setattr(module_app, "dossiers_modeles", lambda: ())
     f = fenetre
-    f.panneau._modele.setCurrentText("fantome.pt")
+    f.panneau._modele.setCurrentText("fantome.onnx")
     f.charger_video(str(video_synthetique))
     statut = f.label_statut.text()
     assert "aucun modèle" in statut.lower()
     assert "modeles/" in statut
+    assert ".onnx" in statut
 
 
 # -- Mémoire du dernier dossier vidéo ---------------------------------------
@@ -1411,7 +1413,7 @@ class CompteurInvisible:
             evenements=[],
         )
 
-    def resultat(self, modele, nb_frames, secondes):
+    def resultat(self, modele, nb_frames, secondes, duree_video_s=0.0):
         from compteur.types import Resultat
 
         return Resultat(
@@ -1421,6 +1423,7 @@ class CompteurInvisible:
             nb_frames=nb_frames,
             presents_max=0,
             secondes=secondes,
+            duree_video_s=duree_video_s,
         )
 
 

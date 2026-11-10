@@ -9,7 +9,7 @@ Trois points méritent un mot, parce qu'ils ne sont pas évidents à la lecture 
   module se contente de refléter la `Config` qu'on lui donne. Les bornes des
   widgets sont des contraintes d'interface (on ne saisit pas un seuil de 0,95
   dans une liste déroulante), pas des valeurs métier.
-- **Les modèles `.pt` ne sont pas versionnés** (voir `.gitignore`). Le panneau
+- **Les modèles `.onnx` ne sont pas versionnés** (voir `.gitignore`). Le panneau
   liste ce qui est réellement sur le disque et, si le dossier est vide, propose
   un repli au lieu de planter ou d'inventer une liste.
 - **`fenetre_lissage` n'existe pas encore dans `Config`** (tâche parallèle).
@@ -38,6 +38,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QPushButton,
     QSpinBox,
+    QToolBox,
     QVBoxLayout,
     QWidget,
 )
@@ -73,11 +74,11 @@ DOSSIER_PROFILS = pathlib.Path("config") / "profils"
 # Alias explicite : le paramètre `dossiers_modeles` de `PanneauReglages` porte
 # le même nom et masquerait la fonction dans le constructeur.
 
-#: Modèle proposé quand aucun `.pt` n'est présent sur le disque.
+#: Modèle proposé quand aucun `.onnx` n'est présent sur le disque.
 #:
-#: `tetes-medium.pt` est un détecteur de têtes entraîné sur SCUT-HEAD. Sur la
-#: vidéo de référence il trouve des têtes de 29 px là où `tetes-medium-1280.pt`
-#: en trouve de 21, soit 38 % de marches réelles en plus. Les `.pt` étant
+#: `tetes-medium.onnx` est un détecteur de têtes entraîné sur SCUT-HEAD. Sur la
+#: vidéo de référence il trouve des têtes de 29 px là où `tetes-medium-1280.onnx`
+#: en trouve de 21, soit 38 % de marches réelles en plus. Les `.onnx` étant
 #: absents du dépôt, ce nom est une *suggestion* : le panneau l'affiche, sans
 #: l'imposer.
 MODELE_REPLI = "tetes-medium.onnx"
@@ -139,15 +140,15 @@ ORIENTATION_SANS_LIGNE = ORIENTATION_VERTICALE
 #: qu'une opinion déguisée en réglage par défaut.
 AIDE: dict[str, str] = {
     "modele": (
-        "Modèle de détection (.pt).\n\n"
+        "Modèle de détection (.onnx).\n\n"
         "Ce que ça fait : cherche des têtes — famille « tetes-… ». Les "
         "modèles « personnes-et-objets-… » détectent 80 types d'objets, dont "
         "les personnes.\n"
         "Ce que ça change : plus lent = meilleures petites têtes, donc plus "
         "de personnes, analyse plus longue.\n"
         "Valeur conseillée : dépend de la prise de vue. Vue de près, "
-        "tetes-medium.pt voit des têtes plus grosses (+38 % de marches sur la "
-        "vidéo de référence) ; vue de loin ou en plongée, tetes-medium-1280.pt "
+        "tetes-medium.onnx voit des têtes plus grosses (+38 % de marches sur la "
+        "vidéo de référence) ; vue de loin ou en plongée, tetes-medium-1280.onnx "
         "écrase tout — mesuré en conditions réelles, 113 personnes contre 57. "
         "Les deux profils livrés ont le bon ; à ranger dans « modeles/ » ou "
         "via « Parcourir… »."
@@ -296,7 +297,7 @@ def copier_config(config: Config, **champs) -> Config:
 def lister_modeles(
     dossiers: tuple[pathlib.Path, ...] | list[pathlib.Path] | None = None,
 ) -> list[str]:
-    """Noms des fichiers `.pt` présents dans `dossiers`, sans doublon.
+    """Noms des fichiers `.onnx` présents dans `dossiers`, sans doublon.
 
     Un dossier absent, vide ou illisible n'est pas une erreur : le dépôt ne
     contient pas les poids, et une installation neuve doit pouvoir ouvrir le
@@ -324,10 +325,22 @@ def lister_profils(dossier: pathlib.Path | None = None) -> list[str]:
     return sorted(p.stem for p in d.glob("*.json"))
 
 
+def _assainir_nom_profil(nom: str) -> str:
+    """Nom de profil ramené à un fichier sûr DANS le dossier des profils.
+
+    Un nom tapé avec un séparateur (« vue/loin ») ou un « .. » ne doit pas
+    pouvoir écrire ailleurs sur le disque : les séparateurs deviennent des
+    tirets bas, le nom reste un simple fichier du dossier des profils. La
+    même règle s'applique à la lecture, sinon le profil écrit ne serait
+    jamais retrouvé sous son nom d'origine.
+    """
+    return nom.strip().replace("/", "_").replace("\\", "_").replace("\x00", "").strip()
+
+
 class _ListeModeles(QComboBox):
     """Liste déroulante qui REBALAYE les dossiers à chaque ouverture.
 
-    Sans cela la liste est figée au démarrage : un `.pt` déposé dans
+    Sans cela la liste est figée au démarrage : un `.onnx` déposé dans
     `modeles/` pendant que le logiciel tourne n'apparaîtrait qu'après un
     redémarrage. Le rebalayage a lieu juste AVANT l'affichage, donc la liste
     montre toujours l'état du disque au moment où on l'ouvre.
@@ -393,13 +406,32 @@ class PanneauReglages(QWidget):
         )
         self._btn_aide.toggled.connect(self._maj_aide)
         racine.addWidget(self._btn_aide)
-        racine.addWidget(self._groupe_detection(config))
-        racine.addWidget(self._groupe_tracker(config))
-        racine.addWidget(self._groupe_ligne(config))
-        racine.addWidget(self._groupe_lissage(config))
-        racine.addWidget(self._groupe_peripherique(config))
-        racine.addWidget(self._groupe_profils())
-        racine.addStretch(1)
+
+        # Accordéon : une section ouverte à la fois (QToolBox), profils en
+        # tête. La colonne de six cartes empilées faisait défiler le panneau
+        # et pouvait pousser le compteur hors du champ ; l'accordéon ne montre
+        # qu'une section, les autres attendent sous leur en-tête. Le panneau
+        # ne décide toujours rien : mêmes widgets, même `lire()`, seule la
+        # présentation change.
+        self._accordeon = QToolBox()
+        self._accordeon.setObjectName("accordeon_reglages")
+        for groupe in (
+            self._groupe_profils(),
+            self._groupe_detection(config),
+            self._groupe_tracker(config),
+            self._groupe_ligne(config),
+            self._groupe_lissage(config),
+            self._groupe_peripherique(config),
+        ):
+            # L'en-tête de page porte le titre : celui du QGroupBox ferait
+            # doublon. On le retire et on aplatit le cadre — la page délimite
+            # déjà la section.
+            titre = groupe.title()
+            groupe.setTitle("")
+            groupe.setFlat(True)
+            self._accordeon.addItem(groupe, titre)
+        self._accordeon.setCurrentIndex(0)  # profils en tête, ouvert
+        racine.addWidget(self._accordeon, stretch=1)
 
         self._bloquer = False
 
@@ -505,11 +537,11 @@ class PanneauReglages(QWidget):
         self._modele.currentTextChanged.connect(self._emettre)
 
         # Le bouton ouvre l'explorateur de fichiers : la façon normale de
-        # désigner un `.pt` rangé n'importe où sur l'ordinateur. Le champ
+        # désigner un `.onnx` rangé n'importe où sur l'ordinateur. Le champ
         # restant éditable, un chemin peut aussi être collé à la main.
         self._bouton_modele = QPushButton("Parcourir…")
         self._bouton_modele.setToolTip(
-            "Choisir un fichier de modèle (.pt ou .onnx) ailleurs sur "
+            "Choisir un fichier de modèle (.onnx) ailleurs sur "
             "l'ordinateur."
         )
         self._bouton_modele.clicked.connect(self._on_parcourir_modele)
@@ -518,7 +550,7 @@ class PanneauReglages(QWidget):
         rangee.setContentsMargins(0, 0, 0, 0)
         rangee.addWidget(self._modele, stretch=1)
         rangee.addWidget(self._bouton_modele)
-        self._poser(v, "modele", "Modèle (fichier .pt)", ligne_modele)
+        self._poser(v, "modele", "Modèle (fichier .onnx)", ligne_modele)
 
         # Le titre du seuil porte la valeur : c'est le seul réglage dont
         # l'effet n'est pas lisible dans la boîte qui le contient.
@@ -741,10 +773,20 @@ class PanneauReglages(QWidget):
         """Noms de modèles actuellement proposés dans la liste déroulante."""
         return [self._modele.itemText(i) for i in range(self._modele.count())]
 
+    def focus_modele(self) -> None:
+        """Donne le focus au champ « Modèle » (clic sur la pastille de la barre).
+
+        Le champ est éditable : on sélectionne son texte pour que l'opérateur
+        puisse taper un nom ou ouvrir la liste aussitôt, sans clic de plus.
+        """
+        self._modele.setFocus()
+        if self._modele.lineEdit() is not None:
+            self._modele.lineEdit().selectAll()
+
     def rafraichir_choix_modeles(self) -> None:
         """Rebalaye les dossiers et complète la liste, sans perdre le choix.
 
-        Appelée à chaque ouverture de la liste (`_ListeModeles`) : un `.pt`
+        Appelée à chaque ouverture de la liste (`_ListeModeles`) : un `.onnx`
         déposé dans `modeles/` pendant que le logiciel tourne apparaît donc
         sans redémarrer. Le texte courant est PRÉSERVÉ — un chemin choisi avec
         « Parcourir… » ne doit pas être effacé par un rafraîchissement, et les
@@ -770,7 +812,7 @@ class PanneauReglages(QWidget):
             self,
             "Choisir un fichier de modèle",
             depart,
-            "Modèles (*.pt *.onnx);;Tous les fichiers (*)",
+            "Modèles (*.onnx);;Tous les fichiers (*)",
         )
         if chemin:
             self._modele.setCurrentText(chemin)
@@ -906,7 +948,7 @@ class PanneauReglages(QWidget):
         self, nom: str, dossier: pathlib.Path | None = None
     ) -> pathlib.Path:
         """Écrit `config/profils/<nom>.json` et retourne son chemin."""
-        nom = nom.strip()
+        nom = _assainir_nom_profil(nom)
         if not nom:
             raise ValueError("un profil doit avoir un nom")
         d = pathlib.Path(dossier) if dossier is not None else DOSSIER_PROFILS
@@ -922,7 +964,7 @@ class PanneauReglages(QWidget):
         self, nom: str, dossier: pathlib.Path | None = None
     ) -> bool:
         """Relit un profil et le pousse dans l'IHM. Faux s'il est illisible."""
-        nom = nom.strip()
+        nom = _assainir_nom_profil(nom)
         if not nom:
             return False
         d = pathlib.Path(dossier) if dossier is not None else DOSSIER_PROFILS

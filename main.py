@@ -42,12 +42,45 @@ def ancrer_dossier_courant() -> None:
             os.chdir(dossier_exe)
 
 
+def installer_journal_fichier() -> pathlib.Path | None:
+    """Journal FICHIER sous `%LOCALAPPDATA%` — en exe windowed, stderr est muet.
+
+    `logging.basicConfig` n'écrit que sur la console : dans un exécutable
+    sans console, providers, migrations, avertissements GPU et échecs non
+    graves sont perdus. Le fichier vit dans le dossier de données de
+    l'utilisateur (`dossier_cache`), en écriture sans privilège. Best-effort :
+    un volume inaccessible ne doit pas empêcher le logiciel de démarrer.
+    Idempotent : un second appel ne empile pas un second handler.
+    """
+    from compteur.erreurs import dossier_cache
+
+    try:
+        dossier = dossier_cache()
+        dossier.mkdir(parents=True, exist_ok=True)
+        chemin = dossier / "journal.log"
+        racine = logging.getLogger()
+        cible = os.path.abspath(chemin)
+        for h in racine.handlers:
+            if isinstance(h, logging.FileHandler) and h.baseFilename == cible:
+                return chemin
+        handler = logging.FileHandler(chemin, encoding="utf-8")
+        handler.setFormatter(
+            logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s")
+        )
+        racine.addHandler(handler)
+        return chemin
+    except OSError as exc:
+        log.warning("journal fichier impossible : %s", exc)
+        return None
+
+
 def main() -> int:
     ancrer_dossier_courant()
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
+    installer_journal_fichier()
 
     app = QApplication(sys.argv)
 
