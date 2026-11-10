@@ -11,7 +11,7 @@ un candidat sans validation explicite de l'opérateur.
 ## Interpréteur — le piège principal
 
 ```bash
-cd "D:/Bureau/projet manif/crowd-counter"
+cd "D:/Bureau/Applications/crowd-counter"
 /c/Python311/python -m pytest tests/ -v
 ```
 
