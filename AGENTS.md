@@ -151,6 +151,26 @@ La suite de tests passe sur l'arbre source ; le `.exe` n'a que ce que le build l
 toute modification des exclusions de paquets, lancer le binaire et vérifier sa fenêtre — un code de
 sortie 0 ne prouve rien.
 
+## Suivi de l'avancement
+
+**Chaque séance laisse une trace dans le dépôt, pas seulement dans le fil de discussion d'un agent.** `ROADMAP.md` dit ce qui est prévu ; `docs/AVANCEMENT.md` dit ce qui a été réellement fait, ce qui est prouvé et ce qui reste.
+
+### Le journal (`docs/AVANCEMENT.md`)
+
+`docs/AVANCEMENT.md` est le **journal daté** du travail : une entrée par séance (avec sa date) ou par lot/PR, ajoutée à la suite du fichier — jamais une réécriture de l'historique. Chaque entrée contient trois blocs :
+
+- **Vérifié** : ce qui a été prouvé, et **comment** — commande et résultat (`/c/Python311/python -m pytest tests/ -q -m "not slow"` → 655 tests, ~9 s, 0 échec ; suite complète 655 passés + 1 sauté ; build PyInstaller vérifié en lançant le `.exe` et sa fenêtre ; mesure de comptage avec segment de frames, `imgsz`, `sens` et matériel…), jamais un code de sortie 0 seul.
+- **Trouvé cassé** : le défaut constaté, sa cause (si connue), le correctif et le test de non-régression ; écrire « rien » si la séance n'a rien révélé.
+- **Reste à faire** : les prochaines étapes concrètes, ou « rien ».
+
+La section « État actuel, en une page » du même fichier (tableau Sujet / État) est mise à jour à chaque entrée : elle donne la photographie à jour sans relire tout le journal.
+
+### Règle de tenue (non négociable)
+
+- **Tout lot ou PR met `docs/AVANCEMENT.md` à jour**, dans le même commit ou dans le commit de documentation qui l'accompagne. Un changement de comportement du produit (comptage, interface, updater, packaging/release) **sans entrée correspondante n'est pas terminé** et ne doit pas être publié ni considéré comme livré.
+- **Une affirmation sans preuve s'écrit « non vérifié ».** Aucun chiffre sans son périmètre (segment de frames, `sens`, résolution, matériel), aucune correction annoncée sans le test qui la prouve.
+- Une PR purement documentaire (aucun changement de comportement) n'exige pas d'entrée datée, mais met à jour l'état actuel si elle change la compréhension du projet.
+
 ## Licence
 
 MIT pour le code uniquement. Les poids `.pt` (`tetes-*.pt`) ne sont pas dans le dépôt et gardent
