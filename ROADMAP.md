@@ -11,7 +11,7 @@ Six lots issus de l'audit lecture seule du 10/11 (`D:\Bureau\Hermes_doc\audits\c
 bug par bug avec `fichier:ligne` et critère de validation : [`docs/refonte-v3.2.0.md`](refonte-v3.2.0.md).
 **Le moteur de comptage n'a pas changé de comportement** (matching IoU intact, batterie non rejouée
 car aucun candidat tracker ouvert) : la refonte porte sur l'exactitude ÉCRAN↔moteur, l'honnêteté du
-bilan, le cycle de vie Qt, les modèles ONNX et l'interface. Suite : **734 passés, 1 sauté** (parité dev).
+bilan, le cycle de vie Qt, les modèles ONNX et l'interface. Suite à la livraison : **734 passés, 1 sauté** (parité dev).
 
 | Lot | Apport | Bugs |
 |---|---|---|
@@ -80,6 +80,28 @@ démarrage.
 il s'agit d'un dialogue avec un bouton qui relance le worker existant.
 Demi-heure à une heure, tests compris.
 
+### 3. Fine-tuning sur les manifs de l'opérateur — effort `L` (candidat, NON lancé)
+
+**Ce que c'est.** Réentraîner le détecteur de têtes sur les vidéos de
+l'opérateur (foule occultée, drapeaux) pour réduire les manqués du banc.
+Discussion du 13/11 : on annote la tête au moment où elle est VISIBLE (pas
+au franchissement — un drapeau peut la cacher à la ligne), boîte sur la
+partie visible ; le tracker fait le pont à la ligne. Les zones de drapeau
+sans boîte apprennent « drapeau ≠ tête ».
+
+**Ce qui existe déjà (13/11).** `tools/annotateur_boites.py`, outil SÉPARÉ
+de l'annotateur au clic : glissé de boîtes sans ligne, « Proposer » laisse
+le modèle ONNX poser ses boîtes à confirmer/corriger, export dataset YOLO
+(`entrainement/images/` + `labels/` + `data.yaml`), reprise des labels.
+15 tests TDD ; fumée vraie vidéo + vrai modèle (45 boîtes proposées sur la
+frame 3600, images exportées brutes vérifiées).
+
+**Ce qui reste.** Annoter beaucoup de frames (45 clics de validation ne
+font pas un jeu d'entraînement), l'entraînement lui-même (torch DEV only,
+export .onnx), et la règle de décision : le banc de vérité terrain
+frame par frame avant/après, pas une impression. Rien ne part sans
+validation explicite de l'opérateur.
+
 ## v2.9 — L'INTERFACE AU SERVICE DU TERRAIN (05/11/2026, LIVRÉE)
 
 Lot piloté par le retour d'usage de l'opérateur sur les vidéos de la manif du
@@ -144,10 +166,10 @@ Effort : `S` < 1 h, `M` 1-4 h, `L` une journée ou plus.
 
 | Item | État au 30/10 | Suite |
 |---|---|---|
-| 1. Banc de vérité terrain | outillage committé, vidéo lente produite, gabarit versionné | **annotation humaine** puis `comparer` |
+| 1. Banc de vérité terrain | **exécuté le 12/11** (annotation partielle : 14/15 appariés à 640 comme à 1280) ; **total humain 45 le 13/11** | numéros de frame des 45 au clic (`tools/annotateur.py`, livré le 13/11), puis `comparer` |
 | 2. CI GitHub Actions | **prouvé** : 1er run rouge (teardown Qt), correctif, 2 runs verts | surveiller les prochains pushes |
 | 3. opencv-headless | bascule faite + mesurée : gain réel **0,5 Mo** (plus de Qt dans la wheel 5.x) | bascule maintenue (bon paquet), pas pour le poids |
-| 4. imgsz sur la bande | **mesuré** (32 à 640/704, 36 à 1280) | décision après vérité terrain |
+| 4. imgsz sur la bande | **mesuré** (32 à 640/704, 36 à 1280) ; total humain 45 (13/11) : 1280 plus proche, et 36+8=44 ≈ 45 | **auto 1280 confirmé** (décision du 12/11, appuyée par le total humain du 13/11) |
 | 5. Reprise au scrub | gardée, sans mémoire | à rouvrir sur besoin réel |
 | 6. Pipeline décodage ‖ GPU | au chaud | seulement si profil > 25 % décodage |
 
@@ -183,6 +205,61 @@ python tools/verite_terrain.py comparer verite_terrain/segment_3600-4500.txt
 ```
 
 C'est ce résultat qui tranchera l'item 4 (32 ou 36 : lequel est juste ?).
+
+**Exécuté le 12/11/2026 — annotation PARTIELLE, verdict borné.** Une annotation
+agent (vision) a été posée dans `verite_terrain/segment_3600-4500.txt` :
+15 franchissements du PREMIER PLAN, chacun décrit (vêtement, accessoire) pour
+être révisable par l'opérateur. Le plan dense en haut de l'image n'a PAS été
+annoté : une vision automatique ne peut pas y compter de façon fiable, et
+inventer une vérité terrain complète serait pire que pas de vérité terrain.
+
+`comparer` aux deux résolutions (segment 3600-4500, `sens=-1`,
+`tetes-medium.onnx`, RTX 4070 SUPER) :
+
+| imgsz | humain | moteur | appariés | manqués | en trop |
+|---|---|---|---|---|---|
+| 1280 (auto de l'app) | 15 | 36 | 14 | 1 (frame 4290) | 22 |
+| 640 (harnais) | 15 | 32 | 14 | 1 (frame 4290) | 18 |
+
+**Lecture honnête.** Les « en trop » ne sont PAS des faux positifs établis :
+ce sont des franchissements que le moteur voit dans le plan que l'annotation
+ne couvre pas. Le seul manque commun (4290, homme en poncho bleu derrière la
+femme au drapeau) est une occlusion — ou un décalage de l'annotation.
+
+**Ce que le banc tranche, et ce qu'il ne tranche pas.** Le rappel au premier
+plan est IDENTIQUE aux deux résolutions (14/15, même manque) : monter à 1280
+ne perd personne sur ce qui est vérifiable. L'écart 32 → 36 est entièrement
+dans le plan non annoté (événements propres à 1280 : ~3676, 3871/3878, 4075,
+4139, 4247). **Le banc ne dit donc pas lequel de 32 ou 36 est juste** — il dit
+que le 1280 ne dégrade pas le premier plan. Décision : `imgsz` reste en
+automatique (1280 sur cette vidéo). Pour trancher, il faut l'annotation
+humaine du plan dense sur `verite_terrain/segment_3600-4500_lent.mp4`.
+
+**Comptage opérateur du 13/11/2026 : 45 sur le segment (total).** L'opérateur a
+compté la vidéo lente à la main : 45 personnes, en signalant que beaucoup sont
+très bien cachées par d'autres — difficiles à voir même pour un bon programme.
+Au niveau du TOTAL, cela donne enfin une direction : 1280 (36) est plus proche
+de 45 que 640 (32) — écart 9 contre 13. Et la réserve de la nouvelle option est
+du bon ordre de grandeur : 36 comptés + 8 passages rapides = 44 ≈ 45 (à 640 :
+32 + 6 = 38, loin du compte). Lecture prudente : les franchissements écartés
+faute de côté de départ connu sont donc probablement, pour l'essentiel, des
+personnes réelles que l'occlusion empêche de confirmer — pas du bruit. Mais un
+total ne prouve pas QUE les 8 écartés sont les 9 manquants (un double compte
+par changement d'identité resterait invisible à ce niveau) : la preuve exige
+les numéros de frame des 45, puis `comparer`. Le total est consigné dans
+`verite_terrain/segment_3600-4500.txt` ; l'annotation frame par frame reste à
+poser par l'opérateur.
+
+**Outil livré le 13/11/2026 : `tools/annotateur.py`.** Noter les frames à la
+main était trop difficile pour l'opérateur ; l'annotateur affiche le segment
+avec la ligne et le numéro gravés (mêmes briques que le banc) et enregistre
+le frame courant à chaque clic sur une tête. Lecture ralentie
+(0,25×/0,5×/1×), pas à pas, seek, annuler/supprimer, reprise d'une session
+existante. Sortie : `verite_terrain/segment_3600-4500_operateur.txt`, prêt
+pour `comparer` ; l'annotation provisoire `segment_3600-4500.txt` n'est pas
+touchée. Son frère `tools/annotateur_boites.py` (même jour) annote des boîtes
+au moment visible pour l'entraînement, sans ligne — voir le candidat
+fine-tuning (v2.10, item 3).
 
 ### 2. Intégration continue (GitHub Actions) — effort `S`
 
@@ -265,9 +342,15 @@ compte (32 contre 36) : le « 32 personnes » de référence n'est pas ce que vo
 un utilisateur du logiciel. Savoir si le 1280 détecte 4 personnes de plus ou
 bien 4 faux comptes ne se tranche qu'avec le banc de vérité terrain (item 1).
 
-**Décision.** Différée à l'item 1 : sans vérité terrain, réduire `imgsz`
-gagnerait du débit mais pourrait perdre de vrais manifestants — ou en
-retirer de faux, impossible à le dire avec un seul total.
+**Décision (12/11/2026, après exécution du banc).** `imgsz` reste en
+**automatique** (1280 sur cette vidéo). Le banc à annotation partielle montre
+un rappel au premier plan identique à 640 et 1280 (14/15 appariés, même
+manque) : monter en résolution ne perd personne sur ce qui est vérifiable, et
+l'écart 32 → 36 se situe entièrement dans le plan dense non annoté. Réduire
+`imgsz` gagnerait du débit sans preuve de gain en justesse — et pourrait perdre
+de vrais manifestants. Trancher 32 vs 36 exige l'annotation humaine du plan
+dense (item 1) ; en attendant, le réglage qui ne dégrade pas le premier plan
+est conservé.
 
 ### 5. Reprise au scrub / recalcul par segment — effort `L` — **idée conservée, sans mémoire**
 
@@ -305,72 +388,15 @@ uniquement si un profil honnête du temps total (part décodage / inférence /
 tracker) sur le segment de référence montre un décodage **> 25 %**. Sinon :
 ne pas commencer.
 
-## v2.8 — FOULE DENSE ET PASSAGES RAPIDES (candidats, 31/10/2026 — requalifiés v2.8 le 04/11)
+## v2.8 — PASSAGES RAPIDES (candidat, 31/10/2026 — requalifié v2.8 le 04/11)
 
-Deux items issus du rapport d'améliorations initial (28/10) qui n'avaient
-pas été repris dans le lot v2.6. Même règle que partout : ils ne
-s'exécutent qu'après annotation du segment de référence (v2.6 item 1) et
-décision explicite. L'opérateur les a requalifiés « v2.8 » le 04/11 en
-faveur de la mise à jour automatique (devenue v2.7).
+Item issu du rapport d'améliorations initial (28/10), non repris dans le lot
+v2.6 ; requalifié « v2.8 » par l'opérateur le 04/11 en faveur de la mise à
+jour automatique (devenue v2.7). Le candidat NMS en foule dense a été retiré
+de la roadmap (demande opérateur du 10/11) : mesuré et jeté le 05/11, verdict
+dans l'historique git — ne pas rouvrir sans donnée nouvelle.
 
-| Item | Ce qu'il améliore | Effort | État |
-|---|---|---|---|
-| 1. NMS en foule dense | sous-comptage quand les têtes se chevauchent | `M` | **MESURÉ ET JETÉ (05/11, branche `essai/v2.8-nms`)** — voir le verdict plus bas |
-| 2. Avertissement passant rapide | signal honnête quand un passage rapide n'est pas compté | `S` | **LIVRÉ sur la branche `essai/v2.8-nms`** (fusion à décider) |
-
-### 1. NMS en foule dense — effort `M`
-
-**Le mécanisme, en détail.** Le modèle YOLO ne sait pas « compter des
-personnes » : il dessine des **boîtes** autour de chaque tête qu'il voit, avec
-un score de confiance. En foule serrée, une seule tête produit souvent
-plusieurs boîtes légèrement décalées qui se chevauchent. Sans filtre, la même
-personne serait comptée trois fois. C'est le rôle du **NMS** (*Non-Maximum
-Suppression*, « suppression des non-maxima ») : parmi un groupe de boîtes qui
-se chevauchent, il **garde la meilleure et supprime toutes les autres** —
-celles dont le chevauchement (IoU, *Intersection over Union* : proportion de
-l'aire commune entre deux boîtes) dépasse un seuil.
-
-**Le défaut qu'on cherche à corriger.** Le NMS ne sait pas distinguer
-« trois boîtes sur la même tête » de « deux vraies têtes collées ». Deux
-personnes côte à côte dans une masse compacte peuvent produire deux boîtes de
-vraies personnes différentes qui se chevauchent au-delà du seuil : le NMS
-**supprime la seconde comme si c'était un doublon**. La personne disparaît de
-la détection, le tracker ne la voit jamais, elle **n'est pas comptée** — et
-silencieusement. Le biais est donc toujours dans le même sens : **la foule
-densément serrée est sous-comptée**, exactement le cas d'usage du logiciel.
-À l'inverse, un NMS trop permissif garde des doublons et **sur-compte** —
-d'où l'obligation de mesurer, jamais de deviner.
-
-**L'état actuel (vérifié dans le code).** L'application n'appelle le modèle
-qu'avec `conf` et `imgsz` (`detecteur.py:232-236`) : le seuil IoU du NMS est
-celui d'ultralytics par défaut et **n'est nulle part réglable** aujourd'hui.
-Aucun compteur n'enregistre combien de boîtes le NMS jette par frame — on
-observe seulement le total final.
-
-**VERDICT MESURÉ (05/11/2026, branche `essai/v2.8-nms`) — candidat JETÉ.**
-Le diagnostic et le balayage ont été faits sur les vidéos de vérité terrain
-de l'opérateur (test57 = 57 personnes, test124 = 124 — scène à banderoles),
-avec le profil gagnant de la batterie :
-
-- **Diagnostic** : le NMS jette 76-79 % des détections brutes (41 frames
-  échantillonnées par vidéo). Grosse proportion, mais normale — l'essentiel
-  des boîtes jetées sont des doublons de la même tête ;
-- **Balayage du seuil IoU** (0,70 = défaut / 0,85 / 0,95) :
-  test57 → 54 / 52 / **60** ; test124 → 107 / 99 / **143**. Monter le seuil
-  **bascule du sous-comptage au sur-comptage** : à 0,95, des pistes
-  fantômes nées sur la ligne font comptées des personnes deux fois
-  (+19 sur test124), et le compteur de passages rapides explose en
-  conséquence (8 → 69) ;
-- **Aucune valeur ne convient aux deux scènes** : le déficit de test124
-  n'est PAS un problème de NMS — ce sont des têtes jamais détectées
-  (cachées derrière les banderoles) et des passages rapides. Le knob
-  `iou_nms` essayé sur la branche a été **retiré** ; le défaut
-  ultralytics (0,7) reste la référence.
-
-Ne pas rouvrir sans donnée nouvelle (par exemple un vrai couloir dense
-filmé en surplomb, qui n'a rien à voir avec ces places ouvertes).
-
-### 2. Avertissement « passage rapide non compté » — effort `S` — **LIVRÉ sur la branche `essai/v2.8-nms`** (fusion à décider)
+### Avertissement « passage rapide non compté » — effort `S` — **LIVRÉ sur `master` en OPTION (12/11/2026)**
 
 **Le défaut.** Une piste n'est acceptée par le tracker qu'après
 `frames_confirmation` frames d'affilée (`config.py`), et le comptage
@@ -407,15 +433,45 @@ l'opérateur le 05/11, à relire avant toute utilisation) :
   derrière les banderoles, invisible pour tout le monde, et le compte
   humain lui-même y a été difficile (déclaré par l'opérateur).
 
-**Implémentation (branche `essai/v2.8-nms`).** Moteur : `Compteur.
-passages_rapides` incrémenté UNIQUEMENT quand `cote_avant is None` (un
-contre-marcheur, `cote_avant <= 0`, est un rejet voulu et n'y figure
-jamais) ; exposé dans `Resultat.passages_rapides` ; récap : ligne ambre
-« N passage(s) rapide(s) possible(s) non compté(s) » (objet
-`#avertissement`, déjà thémé), masquée quand le compteur est à zéro.
-**Mesuré en conditions réelles** : 1 sur test57, 8 sur test124 — les
-avertissements tombent sur de vrais franchissements, le déclencheur est
-juste. 682 tests verts sur la branche.
+**Implémentation (portée sur `master` le 12/11/2026, en OPTION).** Moteur :
+`Compteur.passages_rapides` incrémenté UNIQUEMENT quand `cote_avant is None`
+(un contre-marcheur, `cote_avant <= 0`, est un rejet voulu et n'y figure
+jamais), remis à zéro par `reinitialiser()`, exposé dans
+`Resultat.passages_rapides`. Le compteur tourne **toujours** : l'option ne
+décide que de l'annonce, jamais du décompte.
+
+**Option.** `Config.avertir_passages_rapides` (défaut **True**, choix
+opérateur du 12/11 : « activée »), case à cocher dans le groupe « Tracker »
+du panneau de réglages, aide chiffrée, lue par `lire()` et poussée par
+`appliquer()` — un profil qui la coupe la retrouve coupée au rechargement.
+
+**Annonce à la source unique.** La phrase est produite par
+`rapport.indicateurs_fiabilite`, pas par le récap : l'écran, le bilan copié
+(`texte_bilan`) et le JSON exporté (`json_bilan`) lisent tous `statistiques`,
+donc une réserve affichée à l'écran ne peut pas manquer dans le bilan publié.
+Le chiffre mesuré `fiabilite.passages_rapides` voyage **même option coupée** ;
+seule la phrase disparaît. Récap : zone ambre `#avertissement` existante
+(lot 2 de v3.2.0), masquée quand il n'y a rien à dire — aucun nouvel objet
+graphique, `interface/app.py` inchangé.
+
+**Mesuré (12/11, segment 3600-4500, ligne x=640, `sens=-1`,
+`tetes-medium.onnx`, RTX 4070 SUPER) :**
+
+| imgsz | total | passages rapides | temps |
+|---|---|---|---|
+| 1280 (auto de l'app) | 36 | **8** | 40,2 s |
+| 640 (harnais) | 32 | **6** | 14,4 s |
+
+Les totaux 36 et 32 sont exactement ceux du banc de vérité terrain : le
+compteur d'incertitude ne change pas le décompte. Mesures antérieures de la
+branche, toujours vraies : 1 sur test57, 8 sur test124 — les avertissements
+tombent sur de vrais franchissements, le déclencheur est juste.
+
+**Tests.** 21 tests ajoutés (moteur, propagation `Resultat`, config et
+`default.json`, case ↔ config, annonce écran/JSON/presse-papiers, option
+coupée). Suite complète : **755 passés, 1 sauté** (le saut est la parité
+ONNX↔torch, dev uniquement). Ni build, ni release, ni changement de version :
+`master` est en avance sur v3.2.0, ce n'est pas un oubli à réparer.
 
 ## v2.7 — THÈME ET MISE À JOUR (décisions du 04/11/2026)
 

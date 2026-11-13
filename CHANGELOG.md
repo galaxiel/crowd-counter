@@ -9,13 +9,60 @@ Les modèles livrés sont des graphes `.onnx` **inclus dans l'archive** (depuis 
 v3) ; les poids source `.pt` restent sur le poste de dev (export / fine-tuning)
 et ne sont pas dans les archives (voir le README).
 
+## [3.3.0] — 2026-11-13
+
+Banc de vérité terrain et annotation au clic : l'opérateur dispose enfin d'un
+outil pour poser la vérité terrain sans numéro de frame à recopier, et d'un
+outil séparé pour annoter les boîtes d'entraînement. Côté app, une option
+annonce les franchissements écartés faute de côté de départ connu. Le moteur
+de comptage (appariement IoU) est inchangé.
+
+### Ajouté
+
+- **Option « Avertir des passages rapides non comptés »** (réglages → Tracker,
+  activée par défaut) : annonce les franchissements écartés faute de côté de
+  départ connu — une borne basse d'incertitude, jamais ajoutée au total. Le
+  moteur les mesure toujours ; l'option ne décide que de la phrase. La réserve
+  voyage à la source unique (`rapport.indicateurs_fiabilite`) : récap, bilan
+  copié et JSON exporté ; le chiffre brut reste exporté option coupée.
+  Mesuré segment 3600-4500, sens -1 : 1280 → 36 comptés + 8 signalés ;
+  640 → 32 + 6.
+- **Annotateur au clic** (`tools/annotateur.py`, outil séparé, hors app) :
+  l'opérateur clique sur une tête au moment où elle est SUR la ligne verte ;
+  le frame courant est enregistré sans numéro à noter à la main. Lecture
+  ralentie (0,25×/0,5×/1×), pas à pas, seek, annuler/supprimer, reprise
+  automatique d'une session existante. Ligne et numéro de frame dessinés par
+  les mêmes briques que le banc. Sortie au format du banc
+  (`verite_terrain/segment_<debut>-<fin>_operateur.txt`), relue par
+  `lire_annotations` puis confrontée au moteur par `comparer`. 13 tests TDD.
+- **Annotateur de boîtes** (`tools/annotateur_boites.py`, outil séparé du
+  précédent) : données d'ENTRAÎNEMENT, pas de validation — glisser une boîte
+  sur la tête au moment où elle est visible (pas de ligne), « Proposer »
+  laisse le modèle ONNX poser ses boîtes à confirmer/corriger, export dataset
+  YOLO (`entrainement/` : images brutes + labels normalisés + `data.yaml`),
+  reprise des labels existants. 15 tests TDD.
+
+### Documenté
+
+- **Banc de vérité terrain exécuté le 12/11** sur le segment 3600-4500,
+  annotation partielle (premier plan, à réviser par l'opérateur) : 14/15
+  appariés à 640 comme à 1280, même manqué (frame 4290). Le banc ne tranche pas
+  32 vs 36 (écart dans la foule dense non annotée) ; résolution auto 1280
+  conservée. Annotation : `verite_terrain/segment_3600-4500.txt`.
+  Comptage opérateur du 13/11 : **45** sur le segment (total, sans numéros de
+  frame) ; 36 + 8 = 44 à 1280 contre 32 + 6 = 38 à 640 : l'auto 1280 est
+  confirmé et la réserve annoncée est du bon ordre de grandeur. Comparaison
+  frame par frame en attente des numéros de frame.
+
+Suite : **783 passés, 1 sauté** (parité dev).
+
 ## [3.2.0] — 2026-11-10
 
 Refonte issue de l'audit lecture seule du 10/11 (12 bugs + robustesse) et de sa
 section 4 « interface ». Compte rendu détaillé : `docs/refonte-v3.2.0.md`. Le
 moteur de comptage est inchangé (matching IoU intact) ; la refonte porte sur
 l'exactitude écran↔moteur, l'honnêteté du bilan, le cycle de vie Qt, les modèles
-ONNX et l'interface. Suite : **734 passés, 1 sauté** (parité dev).
+ONNX et l'interface. Suite à la livraison : **734 passés, 1 sauté** (parité dev).
 
 ### Ajouté
 

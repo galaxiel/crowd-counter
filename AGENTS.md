@@ -73,8 +73,9 @@ Avant de travailler, vérifier d'un coup :
 
 ## Tests
 
-- Porte de routine rapide : `python -m pytest tests/ -q -m "not slow"` (**734 tests, ~13 s, 0 échec**).
-- Suite complète : `python -m pytest tests/ -q` — **734 passés, 1 sauté, ~25 s** (vérifié le 10/11/2026, v3.2.0).
+- Porte de routine rapide : `python -m pytest tests/ -q -m "not slow"` (**783 tests, ~18 s, 0 échec**).
+- Suite complète : `python -m pytest tests/ -q` — **783 passés, 1 sauté, ~15-30 s** (vérifié le 13/11/2026,
+  après les deux annotateurs ; 28 cas ajoutés en TDD).
   Le seul test `slow` est `test_detecteur.py::test_parcite_des_detections_contre_l_ancien_chemin_torch` :
   parité ONNX↔torch, **dev uniquement** (exige torch+ultralytics, un graphe `tetes-medium-1280.onnx`
   exporté et la vidéo de référence) — il se saute sur CI et machine neuve (`importorskip` + fichier absent).
@@ -137,7 +138,10 @@ cette vidéo à **1280**. Mesuré le 30/10/2026 sur frames 3600-4500, `sens=-1`,
 (~30 i/s)** — répétable sur 3 passes. Un « 32 » de harnais et un « 36 » d'app ne
 sont donc PAS deux mesures de la même chose. Trancher lequel est juste exige le
 banc de vérité terrain : `tools/verite_terrain.py comparer` (l'app utilise déjà la
-résolution auto de l'app par défaut, `--imgsz` pour forcer).
+résolution auto de l'app par défaut, `--imgsz` pour forcer). L'annotation frame par
+frame se pose au clic avec `tools/annotateur.py` (13/11) : même format de sortie,
+relu par `comparer`. Pour l'entraînement : `tools/annotateur_boites.py` (13/11,
+outil séparé) — boîtes au moment visible, export YOLO.
 
 ## Architecture
 
