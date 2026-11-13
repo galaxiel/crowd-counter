@@ -108,3 +108,23 @@ def test_defauts_et_valeurs_du_dataclass_ne_divergent_pas():
     Config.defauts() ne décrivent plus la même application.
     """
     assert Config() == Config.depuis_fichier(chemin_defaut_config())
+
+
+def test_avertir_passages_rapides_est_active_par_defaut():
+    """L'option est ACTIVÉE par défaut : une incertitude tue est un défaut.
+
+    L'opérateur peut la couper, mais il doit le faire en connaissance de cause
+    — pas découvrir après coup que des passages écartés n'ont jamais été
+    signalés.
+    """
+    assert Config().avertir_passages_rapides is True
+    assert Config.defauts().avertir_passages_rapides is True
+
+
+def test_avertir_passages_rapides_fait_l_aller_retour():
+    """Un profil qui coupe l'option doit la retrouver coupée au rechargement."""
+    c = Config(avertir_passages_rapides=False)
+    d = c.vers_dict()
+    assert d["avertir_passages_rapides"] is False
+    assert Config.depuis_dict(d) == c
+    assert Config.depuis_dict(d).avertir_passages_rapides is False

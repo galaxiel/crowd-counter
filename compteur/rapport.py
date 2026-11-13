@@ -308,6 +308,20 @@ def indicateurs_fiabilite(resultat: Resultat) -> dict:
                 "minimum observé, pas un débit extrapolé."
             )
 
+    # Passages rapides : le moteur les compte TOUJOURS, l'option ne décide que
+    # de la phrase. Le chiffre mesuré voyage donc même option coupée — c'est
+    # l'annonce qui est un choix, pas la mesure. Sans cette réserve, un total
+    # amputé de passages écartés se lirait comme un décompte complet.
+    passages_rapides = int(resultat.passages_rapides or 0)
+    config = resultat.config
+    avertir = config is None or config.avertir_passages_rapides
+    if passages_rapides > 0 and avertir:
+        avertissements.append(
+            f"{passages_rapides} passage(s) rapide(s) possible(s) non compté(s) : "
+            "trop brefs pour être confirmés avant la ligne. Ce n'est pas un "
+            "comptage de plus — le total ne les inclut pas."
+        )
+
     return {
         # -- mesuré --
         "nb_tracks_comptes": len(distincts),
@@ -332,6 +346,7 @@ def indicateurs_fiabilite(resultat: Resultat) -> dict:
         # durée de vie d'un track est justement ce qui dit si le suivi tient.
         "nb_tracks_vus": resultat.nb_tracks_vus,
         "duree_vie_moyenne_track_frames": round(resultat.duree_vie_track_moy, 1),
+        "passages_rapides": passages_rapides,
         # -- lecture --
         "coherent": coherent,
         "avertissements": avertissements,

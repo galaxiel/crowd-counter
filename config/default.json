@@ -13,5 +13,6 @@
   "epaisseur_bande": 30,
   "sens": 1,
   "frames_hysteresis": 2,
-  "fenetre_lissage": 1
+  "fenetre_lissage": 1,
+  "avertir_passages_rapides": true
 }

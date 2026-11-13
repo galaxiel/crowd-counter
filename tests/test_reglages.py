@@ -528,6 +528,7 @@ REGLES = (
     "epaisseur_bande",
     "frames_hysteresis",
     "fenetre_lissage",
+    "avertir_passages_rapides",
 )
 # `peripherique` n'en fait plus partie : l'opérateur a demandé le retrait de
 # l'explication GPU/CPU, et l'indicateur permanent de la barre de statut
@@ -736,6 +737,42 @@ def test_survie_max_atteignable_a_400_pour_verifier_la_mesure(application):
     assert p._widgets["survie_max"].maximum() >= 400
     p._widgets["survie_max"].setValue(400)
     assert p.lire().survie_max == 400
+
+
+# -- Option « avertir des passages rapides » (portée de essai/v2.8-nms) -----
+
+
+def test_l_option_passages_rapides_est_lue_par_le_panneau(application):
+    """La case se lit dans les deux sens : profil coupé, puis recoché à la main."""
+    p = PanneauReglages(Config(avertir_passages_rapides=False))
+    case = p._widgets["avertir_passages_rapides"]
+    assert not case.isChecked()
+    assert p.lire().avertir_passages_rapides is False
+    case.setChecked(True)
+    assert p.lire().avertir_passages_rapides is True
+
+
+def test_appliquer_un_profil_pousse_l_option_passages_rapides(application):
+    """Un profil chargé doit mettre la case à jour, pas seulement la Config.
+
+    Sans ça, l'écran affiche « activée » pendant que le moteur tourne avec
+    l'option coupée : l'opérateur ne peut plus savoir ce qui produit le total.
+    """
+    p = PanneauReglages(Config())
+    assert p._widgets["avertir_passages_rapides"].isChecked()
+    p.appliquer(Config(avertir_passages_rapides=False))
+    assert not p._widgets["avertir_passages_rapides"].isChecked()
+    assert p.lire().avertir_passages_rapides is False
+
+
+def test_cocher_l_option_emet_une_config(application):
+    """Un réglage qui n'émet pas est un réglage que l'application ignore."""
+    p = PanneauReglages(Config())
+    emissions = []
+    p.config_modifiee.connect(lambda c: emissions.append(c))
+    p._widgets["avertir_passages_rapides"].setChecked(False)
+    assert emissions, "cocher/décocher doit émettre la Config"
+    assert emissions[-1].avertir_passages_rapides is False
 
 
 def test_taille_entree_propose_1280(application):

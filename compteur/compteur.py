@@ -51,6 +51,9 @@ class Compteur:
         self.tracker = tracker
         self.ligne: Ligne | None = None
         self.total = 0
+        # Franchissements écartés faute de côté de départ connu. Incertitude
+        # mesurée, jamais ajoutée au total — voir `Resultat.passages_rapides`.
+        self.passages_rapides = 0
         self.presents = 0
         self.presents_max = 0
         # Liste mutée en place, jamais réassignée : l'affichage en garde une
@@ -97,6 +100,7 @@ class Compteur:
 
     def reinitialiser(self) -> None:
         self.total = 0
+        self.passages_rapides = 0
         self.presents = 0
         self.presents_max = 0
         self.evenements.clear()
@@ -371,6 +375,14 @@ class Compteur:
             # franchissement, là où un compteur de frames consécutives plafonne
             # à 1 et rend tout seuil > 1 inatteignable.
             if cote_avant is None or cote_avant <= 0:
+                # Deux rejets, et un seul est une incertitude. Côté de départ
+                # INCONNU : la personne est apparue trop près de la ligne, ou
+                # trop brièvement, pour qu'on sache d'où elle venait — elle a
+                # peut-être franchi, on ne peut pas l'établir. Côté de départ
+                # connu mais négatif : c'est un contre-marcheur, son rejet est
+                # voulu et n'a rien à signaler.
+                if cote_avant is None:
+                    self.passages_rapides += 1
                 continue
             if stabilite < ligne.hysteresis:
                 continue
@@ -459,6 +471,7 @@ class Compteur:
             detections_par_frame=(
                 self._nb_detections / self._nb_frames_vues if self._nb_frames_vues else 0.0
             ),
+            passages_rapides=self.passages_rapides,
         )
 
 

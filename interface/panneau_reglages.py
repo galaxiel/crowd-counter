@@ -30,6 +30,7 @@ import pathlib
 
 from PySide6.QtCore import Signal
 from PySide6.QtWidgets import (
+    QCheckBox,
     QComboBox,
     QDoubleSpinBox,
     QFileDialog,
@@ -266,6 +267,16 @@ AIDE: dict[str, str] = {
         "comptage à 0 — un test l'interdit désormais).\n"
         "Valeur conseillée : 1, aucun lissage — le tremblement mesuré du "
         "détecteur (0,69 px/frame) est bien plus petit qu'une tête."
+    ),
+    "avertir_passages_rapides": (
+        "Avertir des passages rapides non comptés.\n\n"
+        "Ce que ça fait : annonce les franchissements écartés faute d'avoir vu "
+        "la personne assez longtemps avant la ligne — elle a peut-être franchi, "
+        "on ne peut pas l'établir.\n"
+        "Ce que ça change : 0 personne ajoutée au total, l'option ne décide que "
+        "de l'annonce. Sans elle, ces passages incertains restent invisibles.\n"
+        "Valeur conseillée : activée. Mesuré, segment 3600-4500, sens -1, "
+        "1280 : 36 comptés et 8 passages rapides signalés (640 : 32 et 6)."
     ),
     # La vitesse de présentation a été retirée avec le sélecteur (voir
     # `interface.app`) : l'analyse s'affiche à vitesse maximale, il n'y a
@@ -647,6 +658,13 @@ class PanneauReglages(QWidget):
         self._poser(
             v, "seuil_matching", "Seuil de matching (IoU)", self._matching
         )
+
+        # Titre vide : la case porte son propre libellé, une étiquette au-dessus
+        # le répéterait. L'encart d'aide, lui, est posé comme les autres.
+        self._avertir_rapides = QCheckBox("Avertir des passages rapides non comptés")
+        self._avertir_rapides.setChecked(c.avertir_passages_rapides)
+        self._avertir_rapides.toggled.connect(self._emettre)
+        self._poser(v, "avertir_passages_rapides", "", self._avertir_rapides)
         return g
 
     def _groupe_ligne(self, c: Config) -> QGroupBox:
@@ -842,6 +860,7 @@ class PanneauReglages(QWidget):
         c.frames_confirmation = self._confirmation.value()
         c.survie_max = self._survie.value()
         c.seuil_matching = round(self._matching.value(), 3)
+        c.avertir_passages_rapides = self._avertir_rapides.isChecked()
         c.epaisseur_bande = self._epaisseur.value()
         # Le sens n'a plus de widget : la valeur est portée par le panneau
         # (`_valeur_sens`, réglée par la barre de boutons ou un profil).
@@ -919,6 +938,7 @@ class PanneauReglages(QWidget):
             self._confirmation.setValue(config.frames_confirmation)
             self._survie.setValue(config.survie_max)
             self._matching.setValue(config.seuil_matching)
+            self._avertir_rapides.setChecked(config.avertir_passages_rapides)
             self._epaisseur.setValue(config.epaisseur_bande)
             self._valeur_sens = (
                 int(config.sens) if config.sens in (1, -1) else 1

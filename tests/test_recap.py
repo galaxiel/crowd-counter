@@ -126,3 +126,62 @@ def test_points_de_debit_garde_les_minutes_vides(application):
     # Durée nulle : aucune tranche, aucune courbe — et surtout pas de division
     # par zéro.
     assert points_de_debit(Resultat(total=0, evenements=[], duree_video_s=0.0)) == []
+
+
+# -- Avertissement « passages rapides » (option, portée de essai/v2.8-nms) --
+#
+# Le moteur compte les franchissements écartés faute de côté de départ connu.
+# Le récapitulatif les AFFICHE, et l'option `avertir_passages_rapides` décide
+# seulement de cet affichage : le total, lui, ne bouge jamais.
+
+
+def test_recap_avertit_des_passages_rapides(application):
+    from compteur.config import Config
+
+    resultat = resultat_de_test()
+    resultat.passages_rapides = 3
+    resultat.config = Config()
+    panneau = PanneauRecap()
+    panneau.afficher(resultat)
+
+    texte = panneau.avertissements.text()
+    assert "3" in texte, "le chiffre mesuré doit être lu, pas deviné"
+    assert "rapide" in texte
+    assert not panneau.avertissements.isHidden()
+    # L'incertitude n'est PAS un comptage : le total affiché reste celui du
+    # rapport, 13, et non 16.
+    assert panneau.valeurs[LIBELLE_TOTAL].text() == "13"
+
+
+def test_recap_option_desactivee_n_avertit_pas(application):
+    from compteur.config import Config
+
+    resultat = resultat_de_test()
+    resultat.passages_rapides = 3
+    resultat.config = Config(avertir_passages_rapides=False)
+    panneau = PanneauRecap()
+    panneau.afficher(resultat)
+
+    assert "rapide" not in panneau.avertissements.text()
+    # Couper l'avertissement ne change pas le décompte : il change ce qu'on
+    # en dit.
+    assert panneau.valeurs[LIBELLE_TOTAL].text() == "13"
+
+
+def test_recap_sans_passage_rapide_n_avertit_pas(application):
+    """Zéro passage écarté : aucune phrase. Un avertissement vide de sens est
+    un avertissement que l'opérateur apprend à ignorer."""
+    panneau = PanneauRecap()
+    panneau.afficher(resultat_de_test())
+    assert "rapide" not in panneau.avertissements.text()
+
+
+def test_recap_effacer_retire_l_avertissement_de_passages_rapides(application):
+    resultat = resultat_de_test()
+    resultat.passages_rapides = 3
+    panneau = PanneauRecap()
+    panneau.afficher(resultat)
+    assert "rapide" in panneau.avertissements.text()
+    panneau.effacer()
+    assert panneau.avertissements.text() == ""
+    assert panneau.avertissements.isHidden()

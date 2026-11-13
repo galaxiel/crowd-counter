@@ -621,3 +621,71 @@ def test_detections_hors_bande_droite_inchange():
     bord = Detection(150.0, 490.0, 160.0, 500.0, 0.9, 0)  # bord extrême de la bande
     c._integrer(img, [bord], 0, 0.0)
     assert len(c.tracker.recues[-1]) == 1
+
+
+# -- Passages rapides : le franchissement écarté faute de côté de départ ----
+#
+# Porté de la branche essai/v2.8-nms. Un franchissement peut être REJETÉ par
+# le verrou anti-rebond parce que le côté de départ n'a jamais été observé
+# (`cote_avant is None`) : la personne est apparue trop près de la ligne, ou
+# trop brièvement, pour qu'on sache d'où elle venait. Ce n'est pas un
+# contre-marcheur (celui-là a un côté de départ connu, négatif, et son rejet
+# est voulu). C'est une INCERTITUDE, et elle doit être visible.
+
+
+def test_passage_rapide_rejete_du_total_mais_compte_comme_tel():
+    c = jouer(compteur(marche(1, [322.0, 250.0]), sens=-1), 2)
+    assert c.total == 0
+    assert c.passages_rapides == 1
+
+
+def test_une_marche_normale_ne_declenche_pas_l_avertissement():
+    c = jouer(compteur(marche(1, [400.0, 250.0]), sens=-1, frames_hysteresis=1), 2)
+    assert c.total == 1
+    assert c.passages_rapides == 0
+
+
+def test_contre_marcheur_ni_compte_ni_averti():
+    """Un contre-marcheur a un côté de départ CONNU : son rejet est voulu.
+
+    L'avertir comme « passage rapide » annoncerait une incertitude qui n'existe
+    pas — et l'opérateur réglerait un problème imaginaire.
+    """
+    c = jouer(compteur(marche(1, [250.0, 400.0]), sens=-1, frames_hysteresis=1), 2)
+    assert c.total == 0
+    assert c.passages_rapides == 0
+
+
+def test_reinitialiser_riadube_le_compteur_de_passages_rapides():
+    c = jouer(compteur(marche(1, [322.0, 250.0]), sens=-1), 2)
+    assert c.passages_rapides == 1
+    c.reinitialiser()
+    assert c.passages_rapides == 0
+
+
+def test_resultat_transport_les_passages_rapides():
+    """Le bilan doit porter le chiffre : c'est lui que lit le récapitulatif.
+
+    Sans cette propagation, le compteur saurait et l'écran ne pourrait pas le
+    dire — l'incertitude resterait dans le moteur.
+    """
+    c = jouer(compteur(marche(1, [322.0, 250.0]), sens=-1), 2)
+    r = c.resultat("tetes-medium.onnx", nb_frames=2, secondes=0.1, duree_video_s=0.08)
+    assert r.total == 0
+    assert r.passages_rapides == 1
+
+
+def test_passages_rapides_ne_gonfle_jamais_le_total():
+    """L'incertitude est une borne BASSE, pas un comptage.
+
+    Deux passages rapides : le total reste 0 et le chiffre d'incertitude vaut
+    2. Les ajouter au total annoncerait des personnes dont on ne sait pas si
+    elles ont franchi — exactement ce que le verrou anti-rebond refuse.
+    """
+    scenario = [
+        [t(1, 322.0), t(2, 322.0)],
+        [t(1, 250.0), t(2, 250.0)],
+    ]
+    c = jouer(compteur(scenario, sens=-1), 2)
+    assert c.total == 0
+    assert c.passages_rapides == 2

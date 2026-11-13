@@ -393,6 +393,14 @@ class Config:
     # de 1 (K=1) à 0 (K=5, 10, 20). Voir le rapport de tâche 6, section 4.4,
     # et `tests/test_lissage.py::test_une_fenetre_quelconque_ne_casse_pas_la_marche_de_reference`.
     fenetre_lissage: int = 1
+    # Avertissement « passages rapides » — option d'ANNONCE, pas de comptage.
+    #
+    # Le moteur compte toujours les franchissements écartés faute de côté de
+    # départ connu (`Compteur.passages_rapides`) ; ce réglage décide seulement
+    # si le bilan les annonce. Activé par défaut : une incertitude tue est un
+    # défaut, et l'opérateur doit pouvoir la couper en connaissance de cause.
+    # Le total, lui, ne change JAMAIS avec cette option.
+    avertir_passages_rapides: bool = True
 
     def vers_dict(self) -> dict:
         d = asdict(self)

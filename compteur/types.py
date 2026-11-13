@@ -115,3 +115,11 @@ class Resultat:
     duree_vie_track_moy: float = 0.0
     nb_tracks_vus: int = 0
     detections_par_frame: float = 0.0
+    #: Franchissements ÉCARTÉS par le verrou anti-rebond faute de côté de
+    #: départ connu : la personne est apparue trop près de la ligne, ou trop
+    #: brièvement, pour qu'on sache d'où elle venait. Ce n'est PAS un
+    #: comptage mais une borne basse d'incertitude — jamais ajoutée au total.
+    #: Un contre-marcheur (côté de départ connu, négatif) n'y entre pas : son
+    #: rejet est voulu. Le moteur le mesure toujours ; l'option
+    #: `Config.avertir_passages_rapides` ne décide que de l'annonce.
+    passages_rapides: int = 0

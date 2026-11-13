@@ -18,12 +18,16 @@ Deux exigences gouvernent ces tests :
    un cas limite inventé pour les tests. Le calcul ne doit pas planter.
 """
 
+import json
+
 import pytest
 
 from compteur.config import Config
 from compteur.rapport import (
     indicateurs_fiabilite,
+    json_bilan,
     statistiques,
+    texte_bilan,
 )
 from compteur.types import Evenement, Resultat
 
@@ -299,3 +303,50 @@ def test_fiabilite_avec_zero_evenement_ne_plante_pas():
     assert f["intervalle_median_evenements_s"] is None
     assert f["frames_par_evenement"] is None
     assert isinstance(f["avertissements"], list)
+
+
+# -- Passages rapides : l'incertitude mesurée par le moteur -----------------
+#
+# Le chiffre est TOUJOURS exposé (c'est une mesure) ; l'option
+# `avertir_passages_rapides` ne décide que de la PHRASE qui l'accompagne.
+# Écran, presse-papiers et JSON lisent la même source : une réserve affichée
+# à l'écran mais absente du bilan copié serait un chiffre publié sans sa
+# réserve.
+
+
+def test_passages_rapides_exposes_meme_option_coupee():
+    r = resultat_fictif()
+    r.passages_rapides = 4
+    r.config = Config(avertir_passages_rapides=False)
+    f = indicateurs_fiabilite(r)
+    assert f["passages_rapides"] == 4
+    assert not any("rapide" in a for a in f["avertissements"])
+
+
+def test_passages_rapides_avertissent_par_defaut():
+    r = resultat_fictif()
+    r.passages_rapides = 4
+    f = indicateurs_fiabilite(r)
+    assert any("4" in a and "rapide" in a for a in f["avertissements"])
+
+
+def test_aucun_passage_rapide_aucune_phrase():
+    f = indicateurs_fiabilite(resultat_fictif())
+    assert f["passages_rapides"] == 0
+    assert not any("rapide" in a for a in f["avertissements"])
+
+
+def test_bilan_copie_et_json_portent_la_meme_reserve():
+    r = resultat_fictif()
+    r.passages_rapides = 4
+    assert "rapide" in texte_bilan(r)
+    reserve = json.loads(json_bilan(r))["fiabilite"]["avertissements"]
+    assert any("rapide" in a for a in reserve)
+    # Option coupée : la PHRASE disparaît des deux, et le chiffre mesuré reste
+    # dans le JSON. Chercher « rapide » dans tout le fichier serait ambigu :
+    # la clé `passages_rapides` y est toujours, et c'est voulu.
+    r.config = Config(avertir_passages_rapides=False)
+    assert "rapide" not in texte_bilan(r)
+    bilan = json.loads(json_bilan(r))
+    assert not any("rapide" in a for a in bilan["fiabilite"]["avertissements"])
+    assert bilan["fiabilite"]["passages_rapides"] == 4
