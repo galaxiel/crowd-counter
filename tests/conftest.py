@@ -47,7 +47,15 @@ def fermeture_qt_protegee():
     app = QApplication.instance()
     if app is None:
         return
+    from PySide6.QtCore import QEvent, QCoreApplication, QTimer
+
+    # Stoppe d'abord les minuteurs encore actifs : les fenêtres d'annotation
+    # (tools/annotateur*.py) en démarrent un pour la lecture. Un QTimer qui
+    # survit jusqu'à la finalisation est collecté par le GC dans un ordre
+    # arbitraire — exactement le scénario de crash ci-dessous.
     for fenetre in app.topLevelWidgets():
+        for minuteur in fenetre.findChildren(QTimer):
+            minuteur.stop()
         fenetre.close()
         fenetre.deleteLater()
     app.processEvents()
@@ -56,8 +64,18 @@ def fermeture_qt_protegee():
     # les suppressions différées. `sendPostedEvents(None, DeferredDelete)`
     # les vide explicitement — sans quoi les widgets survivraient encore à
     # la session, exactement le scénario de crash.
-    from PySide6.QtCore import QEvent, QCoreApplication
+    QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
 
+    # Détruit AUSSI la QApplication, dans le même ordre maîtrisé. Sans elle,
+    # son wrapper shiboken et les derniers QObject survivent à la sortie de
+    # l'interpréteur : le GC les finalise alors dans un ordre arbitraire et
+    # PySide6 sur Linux offscreen avorte — « Fatal Python error: bool_dealloc:
+    # deallocating True or False », SIGABRT (134) alors que TOUS les tests sont
+    # passés (mesuré en CI le 13/11/2026, fenêtres d'annotation). Tout est déjà
+    # fermé ci-dessus ; la sortie de l'interpréteur ne trouve plus rien à
+    # détruire. `deleteLater` + vidage des DeferredDelete suit le même chemin
+    # Qt que pour les widgets (pas de destruction sauvage pendant un event).
+    app.deleteLater()
     QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
 
 
