@@ -4,4 +4,44 @@
 # `#` pour un commentaire, lignes vides acceptées.
 #
 # Compléter PUIS lancer :
-#   python tools/verite_terrain.py comparer D:/Bureau/projet manif/crowd-counter/verite_terrain/segment_3600-4500.txt
+#   python tools/verite_terrain.py comparer verite_terrain/segment_3600-4500.txt
+#
+# ---------------------------------------------------------------------------
+# ANNOTATION AGENT (vision), 12/11/2026 — À RÉVISER PAR L'OPÉRATEUR.
+# Méthode : planches contact (crops x=440-840, tous les 3 frames, 3600-4497),
+# ligne verte = x=640, sens=-1 => franchissements DROITE -> GAUCHE uniquement.
+# PORTÉE PARTIELLE : seuls les franchissements nets de PREMIER PLAN sont
+# listés ci-dessous (personnes suivies de tuile en tuile). La foule dense du
+# haut de l'image (rassemblement quasi statique, drapeaux UPR) n'est PAS
+# annotée : ses franchissements lents sont trop ambigus à l'oeil sur planches.
+# Conséquence pour `comparer` : les « manques » mesurent le rappel du moteur
+# sur ces franchissements nets ; les « en_trop » sont dominés par la foule
+# dense NON annotée et ne doivent PAS être lus comme des faux positifs.
+# Une vérité terrain COMPLÈTE exige l'annotation humaine de la vidéo lente
+# (verite_terrain/segment_3600-4500_lent.mp4) par l'opérateur.
+# ---------------------------------------------------------------------------
+# COMPTAGE OPÉRATEUR, 13/11/2026 : 45 personnes sur le segment 3600-4500
+# (TOTAL, sans numéros de frame). Foule fortement occultée : beaucoup de
+# personnes très bien cachées par d'autres, difficiles à voir même pour un
+# bon programme. Ce total est la référence humaine du segment ; les 15 lignes
+# ci-dessous restent l'annotation agent PARTIELLE (premier plan), pas les 45.
+# `comparer` exige un numéro de frame par franchissement : ce total seul ne
+# s'y injecte pas — il se consigne ici, il ne se compare pas frame par frame.
+# ---------------------------------------------------------------------------
+#
+# Premier plan, droite -> gauche (frame estimée où la personne est sur la ligne) :
+3732  # gilet jaune + casquette rouge, porte-drapeau UPR
+3755  # femme chemise à carreaux, bottines rouges
+3802  # gilet jaune + casquette rouge + sac noir
+3850  # gilet jaune sur chemise bleue, lunettes
+3862  # chauve, pull marine + sac noir
+3930  # cheveux gris, manteau noir, gilet jaune dessous, lunettes de soleil
+4040  # chemise fleurie bleue, cheveux gris
+4048  # chauve, veste sombre (derrière la chemise fleurie)
+4108  # chemise bleu clair, cheveux gris, veste sur le bras
+4204  # chemise bleu clair + pantalon beige, veste sombre sur le bras
+4215  # tenue beige/kaki + casquette rouge + sac
+4281  # femme manteau noir, petit drapeau français
+4290  # homme poncho/cape bleue (derrière la femme au drapeau)
+4321  # écharpe grise + pull marine, feuille en main
+4347  # T-shirt gris + veste noire + sac marron

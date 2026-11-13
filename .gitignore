@@ -30,6 +30,10 @@ rapport.json
 *_results.txt
 config/local_*.json
 
+# Dataset d'entraînement : les labels sont le précieux (versionnables),
+# les images se régénèrent depuis la vidéo.
+entrainement/images/
+
 # Notes de session (reprise de projet) : pour le dev et l'IA uniquement,
 # pas pour le repo public. Reste sur le disque local.
 ETAT_PROJET.md
