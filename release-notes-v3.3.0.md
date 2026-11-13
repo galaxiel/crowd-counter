@@ -51,4 +51,4 @@ counting algorithm itself is unchanged (IoU matching untouched).
 - Test suite: 783 passed, 1 skipped (dev-only ONNX↔torch parity, needs an exported
   graph).
 
-**SHA-256**: PENDING
+**SHA-256**: c9d8f0cd643e3822d0b98c36d36cda4db94918f54c986eb4742bebc8dfa0ac12
