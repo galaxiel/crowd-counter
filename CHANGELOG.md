@@ -9,6 +9,52 @@ Les modèles livrés sont des graphes `.onnx` **inclus dans l'archive** (depuis 
 v3) ; les poids source `.pt` restent sur le poste de dev (export / fine-tuning)
 et ne sont pas dans les archives (voir le README).
 
+## [3.4.0] — 2026-11-18
+
+Les outils de banc gagnent un sélecteur de vidéo et une annotation segment par
+segment ; le banc peut confronter le moteur sur n'importe quelle vidéo. Côté
+app, la barre de réglages se réorganise sur deux lignes et la molette ne change
+plus les champs sans focus. Le moteur de comptage (appariement IoU) est
+inchangé.
+
+### Ajouté
+
+- **Annotateur au clic — sélecteur de vidéo et segments** (`tools/annotateur.py`) :
+  bouton **« Ouvrir une vidéo… »**, case **« Toute la vidéo »**, champs
+  **début/fin**, bouton **« Segment suivant ▶ »** (pas de 900 frames par défaut,
+  longueur du créneau de référence). Démarre au premier segment. Le fichier de
+  sortie suit la vidéo : la référence garde `segment_…_operateur.txt` (les
+  annotations existantes restent liées), une autre vidéo est préfixée de son nom.
+- **Annotateur de boîtes — sélecteur de vidéo** (`tools/annotateur_boites.py`) :
+  même bouton et mêmes contrôles « toute la vidéo / segment » ; le dataset
+  d'entraînement d'une autre vidéo va dans `entrainement/<nom_video>/` pour ne
+  pas mélanger les frames de deux vidéos.
+- **Banc — vidéo au choix** (`tools/verite_terrain.py`) : option `--video` sur
+  `comparer` et `extraire` (défaut : la référence). L'annotateur affiche la
+  commande `comparer` avec `--video` quand ce n'est pas la référence.
+- **Lanceurs double-clic** : `Ouvrir-annotateur-clic.bat` et
+  `Ouvrir-annotateur-boites.bat` (sans console), pour ouvrir les outils comme
+  une application.
+
+### Modifié
+
+- **Barre de l'application sur deux lignes** : la pastille modèle, le choix du
+  « Thème » et « À propos » passent sur une **deuxième ligne**, avec le bouton
+  « ☕ Buy me a coffee ». La première ligne ne garde que les boutons d'action.
+
+### Corrigé
+
+- **Molette sur les champs** : le filtre ne couvrait que le panneau de réglages ;
+  la liste « Thème » de l'en-tête changeait encore au défilement. La molette est
+  désormais neutralisée sur **tous** les champs sans focus (panneau et en-tête) ;
+  hors du panneau, elle ne fait rien défiler.
+
+### Note
+
+- Les outils d'annotation s'ouvrent même sans vidéo de référence (image noire +
+  invitation à « Ouvrir une vidéo… ») : `D:\Bureau\manif_test.mp4` peut être
+  absent du poste.
+
 ## [3.3.0] — 2026-11-13
 
 Banc de vérité terrain et annotation au clic : l'opérateur dispose enfin d'un
