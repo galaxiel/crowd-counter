@@ -310,12 +310,12 @@ class _MoletteChamps(QObject):
         self._zone = zone
 
     def eventFilter(self, obj, event) -> bool:
-        if (
-            event.type() == QEvent.Type.Wheel
-            and not obj.hasFocus()
-        ):
-            # Transmis à la zone défilante : c'est ELLE qui défile.
-            QApplication.sendEvent(self._zone.viewport(), event)
+        if event.type() == QEvent.Type.Wheel and not obj.hasFocus():
+            # Dans le panneau : on transmet à la zone, qui défile. Hors du
+            # panneau (ex. liste « Thème » de l'en-tête) : on consomme
+            # seulement — le champ ne change pas et rien ne défile.
+            if self._zone.isAncestorOf(obj):
+                QApplication.sendEvent(self._zone.viewport(), event)
             return True
         return False
 
@@ -717,12 +717,10 @@ class FenetrePrincipale(QMainWindow):
         zone.setWidgetResizable(True)
         zone.setFrameShape(QScrollArea.Shape.NoFrame)
         # La molette fait DÉFILER le panneau ; un champ ne change de
-        # valeur qu'avec le focus (constat opérateur, 05/11/2026).
+        # valeur qu'avec le focus (constat opérateur, 05/11/2026). Le filtre
+        # est installé sur TOUS les champs en fin de constructeur, une fois
+        # l'en-tête construit (la liste « Thème » y vit, hors du panneau).
         self._filtre_molette = _MoletteChamps(zone)
-        # PySide6 : findChildren n'accepte pas un TUPLE de types.
-        for type_champ in (QComboBox, QSpinBox, QDoubleSpinBox):
-            for champ in self.panneau.findChildren(type_champ):
-                champ.installEventFilter(self._filtre_molette)
         colonne.addWidget(zone, stretch=1)
 
         barre = QHBoxLayout()
@@ -770,6 +768,12 @@ class FenetrePrincipale(QMainWindow):
         ):
             barre.addWidget(b)
 
+        # Deuxième ligne : modèle + thème + à propos + soutien. Les trois
+        # informations « à propos du logiciel » (modèle chargé, thème, version)
+        # sortent de la ligne d'action, pour garder la rangée de boutons nette
+        # (demande opérateur du 18/11/2026). Le bouton de soutien les rejoint.
+        barre_secondaire = QHBoxLayout()
+
         # Libellé PERMANENT du modèle : l'opérateur voit quel modèle va
         # tourner sans ouvrir les réglages ni charger une vidéo. Avant ce
         # lot, l'information n'existait que dans le statut (après ouverture
@@ -786,7 +790,7 @@ class FenetrePrincipale(QMainWindow):
             "Ambre : absent — clique pour le choisir dans les réglages."
         )
         self.label_modele.clicked.connect(self._on_badge_modele)
-        barre.addWidget(self.label_modele)
+        barre_secondaire.addWidget(self.label_modele)
         self._maj_label_modele()
 
         # Choix du thème (sombre / clair / suivre le système), en bout de
@@ -809,8 +813,8 @@ class FenetrePrincipale(QMainWindow):
         )
         etiquette_theme = QLabel("Thème")
         etiquette_theme.setObjectName("libelle_reglage")
-        barre.addWidget(etiquette_theme)
-        barre.addWidget(self.choix_theme)
+        barre_secondaire.addWidget(etiquette_theme)
+        barre_secondaire.addWidget(self.choix_theme)
         # « À propos » : version, vérification MANUELLE de mise à jour
         # (le bouton vert, lui, n'apparaît que QUAND une mise à jour
         # existe) et lien vers les versions. Demande opérateur du
@@ -821,11 +825,12 @@ class FenetrePrincipale(QMainWindow):
             "page des versions."
         )
         self.btn_a_propos.clicked.connect(self._ouvrir_a_propos)
-        barre.addWidget(self.btn_a_propos)
+        barre_secondaire.addWidget(self.btn_a_propos)
         self._barre_boutons = barre
         colonne.addLayout(barre)
+        colonne.addLayout(barre_secondaire)
 
-        # Bouton de soutien, discret, tout en bas sous la barre de boutons.
+        # Bouton de soutien, sur la deuxième ligne avec modèle/thème/à propos.
         # Ce n'est pas un réglage : il ouvre simplement la page de don dans le
         # navigateur. Pas de JS, pas de widget web — un lien natif, qui marche
         # hors ligne et ne ralentit rien.
@@ -835,7 +840,8 @@ class FenetrePrincipale(QMainWindow):
             "Soutenir le développement du compteur — ouvre la page de don "
             "dans ton navigateur."
         )
-        colonne.addWidget(self.btn_soutenir, alignment=Qt.AlignmentFlag.AlignHCenter)
+        barre_secondaire.addWidget(self.btn_soutenir)
+        barre_secondaire.addStretch(1)
 
         # Traitement : intervalle 0, donc « aussi vite que possible ». C'est
         # le GPU qui fixe la cadence de cette minuterie, jamais un réglage
@@ -852,6 +858,14 @@ class FenetrePrincipale(QMainWindow):
         # et le comptage, lui, reste à la cadence du timer de traitement.
         self._timer_affichage = QTimer(self)
         self._timer_affichage.setInterval(1000 // CADENCE_AFFICHAGE_IPS)
+
+        # Molette neutralisée sur TOUS les champs sans focus — panneau ET
+        # en-tête (dont la liste « Thème »). Sans ça, un défilement au-dessus
+        # d'un champ changeait sa valeur sans le vouloir (constat opérateur).
+        # PySide6 : findChildren n'accepte pas un TUPLE de types.
+        for type_champ in (QComboBox, QSpinBox, QDoubleSpinBox):
+            for champ in self.findChildren(type_champ):
+                champ.installEventFilter(self._filtre_molette)
 
     def _connecter(self) -> None:
         self.btn_video.clicked.connect(self._on_charger_video)

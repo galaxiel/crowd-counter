@@ -107,3 +107,33 @@ def test_molette_sur_une_liste_sans_focus_ne_la_change_pas(
     QApplication.sendEvent(combo, _molette(-120))
 
     assert combo.currentIndex() == index_avant
+
+
+def test_molette_hors_du_panneau_ne_change_pas_et_ne_defile_pas(application):
+    """La liste « Thème » de l'en-tête est hors du panneau : la molette ne doit
+    ni changer sa valeur ni faire défiler les réglages."""
+    zone = QScrollArea()
+    contenu = QWidget()
+    v = QVBoxLayout(contenu)
+    v.addSpacing(600)
+    zone.setWidget(contenu)
+    zone.setWidgetResizable(True)
+    zone.resize(300, 400)
+
+    combo = QComboBox()
+    combo.addItems(["a", "b", "c"])
+    combo.show()  # hors de la zone, comme l'en-tête
+    filtre = _MoletteChamps(zone)
+    combo.installEventFilter(filtre)
+    zone.show()
+    application.processEvents()
+
+    index_avant = combo.currentIndex()
+    barre_avant = zone.verticalScrollBar().value()
+
+    QApplication.sendEvent(combo, _molette(-120))
+
+    assert combo.currentIndex() == index_avant
+    assert zone.verticalScrollBar().value() == barre_avant
+    combo.close()
+    zone.close()
