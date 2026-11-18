@@ -190,7 +190,10 @@ def test_clic_sans_glisse_cree_une_boite_par_defaut(application, tmp_path):
     boites = f.session.boites(3600)
     assert len(boites) == 1
     x1, y1, x2, y2 = boites[0]
-    assert x2 - x1 >= 16 and y2 - y1 >= 20
+    # Taille mesurée d'une tête (1280×720 : ~1,3 % × 2,7 % -> ~17×19 px),
+    # PAS une grosse boîte arbitraire.
+    assert 8 <= x2 - x1 <= 40
+    assert 10 <= y2 - y1 <= 50
     assert f.liste.count() == 1
 
 
@@ -349,3 +352,45 @@ def test_sans_video_reference_la_fenetre_s_ouvre_quand_meme(application, tmp_pat
     f.show()
     application.processEvents()
     assert f._sans_video is True
+
+
+def test_supprimer_enleve_la_plus_ancienne_la_premiere(application, tmp_path):
+    f = construire(application, tmp_path, detecteur=FauxDetecteur())
+    f.bouton_proposer.click()  # boîte du modèle, la plus ancienne
+    assert len(f.session.boites(3600)) == 1
+    boite_modele = f.session.boites(3600)[0]
+    c = f.video.rect().center()
+    glisser(f, application, (c.x(), c.y()), (c.x(), c.y()))
+    assert len(f.session.boites(3600)) == 2
+    boite_manuelle = f.session.boites(3600)[1]
+    f.bouton_supprimer.click()
+    # La PLUS ANCIENNE (celle du modèle) part en premier.
+    assert f.session.boites(3600) == [boite_manuelle]
+    assert boite_modele not in f.session.boites(3600)
+
+
+class FauxDetecteurConfigurable:
+    class _Config:
+        seuil_confiance = 0.25
+        taille_entree = 640
+        taille_min_px = 3
+
+    def __init__(self):
+        self.config = FauxDetecteurConfigurable._Config()
+        self.seen_seuil = None
+
+    def detecter(self, img, bande=None):
+        self.seen_seuil = self.config.seuil_confiance
+        return []
+
+
+def test_proposer_applique_les_reglages_de_detection(application, tmp_path):
+    det = FauxDetecteurConfigurable()
+    f = construire(application, tmp_path, detecteur=det)
+    f.champ_confiance.setValue(0.10)
+    f.champ_imgsz.setValue(1280)
+    f.champ_taille_min.setValue(2)
+    f.bouton_proposer.click()
+    assert abs(det.config.seuil_confiance - 0.10) < 1e-9
+    assert det.config.taille_entree == 1280
+    assert det.config.taille_min_px == 2

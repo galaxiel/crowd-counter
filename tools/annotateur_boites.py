@@ -32,6 +32,7 @@ from PySide6.QtGui import QColor, QPainter  # noqa: E402
 from PySide6.QtWidgets import (  # noqa: E402
     QApplication,
     QCheckBox,
+    QDoubleSpinBox,
     QFileDialog,
     QHBoxLayout,
     QLabel,
@@ -282,6 +283,33 @@ class FenetreBoites(QWidget):
         rangee_haut.addWidget(self.champ_fin)
         rangee_haut.addStretch(1)
 
+        # Réglages de « Proposer » (détection) : baisser la confiance, monter
+        # la taille d'entrée ou baisser la taille minimale montre PLUS de têtes.
+        # Mesuré (manif_test f3699, tetes-medium) : 640/0,25 -> 49 têtes ;
+        # 1280/0,15 -> 69. Ces trois curseurs couvrent le réglage.
+        self.champ_confiance = QDoubleSpinBox()
+        self.champ_confiance.setRange(0.01, 0.99)
+        self.champ_confiance.setDecimals(2)
+        self.champ_confiance.setSingleStep(0.05)
+        self.champ_confiance.setValue(0.20)
+        self.champ_imgsz = QSpinBox()
+        self.champ_imgsz.setRange(320, 1920)
+        self.champ_imgsz.setSingleStep(64)
+        self.champ_imgsz.setValue(1280)
+        self.champ_taille_min = QSpinBox()
+        self.champ_taille_min.setRange(1, 100)
+        self.champ_taille_min.setValue(3)
+        rangee_detect = QHBoxLayout()
+        rangee_detect.addWidget(QLabel("Proposer — confiance"))
+        rangee_detect.addWidget(self.champ_confiance)
+        rangee_detect.addWidget(QLabel("taille d'entrée"))
+        rangee_detect.addWidget(self.champ_imgsz)
+        rangee_detect.addWidget(QLabel("taille min px"))
+        rangee_detect.addWidget(self.champ_taille_min)
+        rangee_detect.addStretch(1)
+        for _reglage in (self.champ_confiance, self.champ_imgsz, self.champ_taille_min):
+            _reglage.setEnabled(self.detecteur is not None)
+
         self.curseur = QSlider(Qt.Orientation.Horizontal)
         self.curseur.setRange(debut, fin - 1)
         self.curseur.setValue(debut)
@@ -297,13 +325,14 @@ class FenetreBoites(QWidget):
 
         self.label_compte = QLabel()
         self.liste = QListWidget()
-        self.bouton_supprimer = QPushButton("Supprimer la sélection")
+        self.bouton_supprimer = QPushButton("Supprimer la plus ancienne")
         self.bouton_proposer = QPushButton("Proposer (modèle)")
         self.bouton_enregistrer = QPushButton("Enregistrer le dataset")
         self.label_aide = QLabel(
             "CLIC sur une tête = boîte de taille standard (la plus rapide).\n"
             "GLISSE = boîte sur mesure. Boîte déjà posée : le clic est ignoré.\n"
-            "Pour supprimer : sélectionne dans la liste (à droite) puis Supprimer."
+            "Supprimer : chaque clic enlève la PLUS ANCIENNE (modèle compris).\n"
+            "Plus de têtes ? baisse la confiance, monte la taille d'entrée."
         )
         self.label_aide.setWordWrap(True)
         self.bouton_supprimer.clicked.connect(self._supprimer)
@@ -332,6 +361,7 @@ class FenetreBoites(QWidget):
 
         racine = QVBoxLayout(self)
         racine.addLayout(rangee_haut)
+        racine.addLayout(rangee_detect)
         racine.addWidget(self.video, stretch=1)
         racine.addWidget(self.curseur)
         racine.addLayout(rangee)
@@ -547,14 +577,11 @@ class FenetreBoites(QWidget):
         return False
 
     def _ajouter(self, boite: tuple[int, int, int, int]) -> None:
-        """Ajoute une boîte au frame courant (sans doublon) et la sélectionne."""
+        """Ajoute une boîte au frame courant (sans doublon)."""
         if self._boite_existe(self.source.index, boite):
             return
         self.session.ajouter(self.source.index, boite)
         self._redessiner()
-        # Sélectionne la boîte neuve : « Supprimer la sélection » l'enlève
-        # aussitôt, sans avoir à cliquer dans la liste.
-        self.liste.setCurrentRow(self.liste.count() - 1)
 
     def _sur_boite(self, x1: int, y1: int, x2: int, y2: int) -> None:
         self._pause()
@@ -566,27 +593,39 @@ class FenetreBoites(QWidget):
         if self._image_brute is None:
             return
         hauteur, largeur = self._image_brute.shape[:2]
-        w = max(16, round(largeur * 0.034))
-        h = max(20, round(hauteur * 0.075))
+        # Taille MESURÉE des boîtes du détecteur sur frames réelles (test57 /
+        # manif_test / plongée) : tête ≈ 1,3 % largeur / 2,7 % hauteur, puis
+        # +20 % demandés par l'opérateur (boîte un peu plus large que la tête
+        # stricte, plus confortable à annoter). Proportions -> juste en 720p
+        # comme en 1080p.
+        w = max(8, round(largeur * 0.0156))
+        h = max(10, round(hauteur * 0.0324))
         x1 = max(0, min(largeur - w, x - w // 2))
         y1 = max(0, min(hauteur - h, y - h // 2))
         self._ajouter((x1, y1, x1 + w, y1 + h))
 
     def _supprimer(self) -> None:
-        ligne = self.liste.currentRow()
-        if ligne < 0:
-            self.label_aide.setText(
-                "Sélectionne d'abord une boîte dans la liste (à droite), "
-                "puis « Supprimer la sélection »."
-            )
+        boites = self.session.boites(self.source.index)
+        if not boites:
+            self.label_aide.setText("Aucune boîte à supprimer sur cette image.")
             return
-        self.session.supprimer(self.source.index, ligne)
+        # Enlève la PLUS ANCIENNE (première posée), y compris une boîte du
+        # modèle : chaque clic en retire une, dans l'ordre d'ajout.
+        self.session.supprimer(self.source.index, 0)
         self._redessiner()
 
     def _proposer(self) -> None:
         if self.detecteur is None or self._image_brute is None:
             return
         self._pause()
+        # Applique les réglages courants au MOTEUR (seuil, résolution, taille
+        # min). Le detecter lit sa config à chaque appel ; on évite de recharger
+        # le modèle. `getattr` : le détecteur factice des tests n'a pas de config.
+        cfg = getattr(self.detecteur, "config", None)
+        if cfg is not None:
+            cfg.seuil_confiance = float(self.champ_confiance.value())
+            cfg.taille_entree = int(self.champ_imgsz.value())
+            cfg.taille_min_px = int(self.champ_taille_min.value())
         frame = self.source.index
         for d in self.detecteur.detecter(self._image_brute):
             boite = (int(d.x1), int(d.y1), int(d.x2), int(d.y2))
