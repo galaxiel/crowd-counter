@@ -195,3 +195,119 @@ def test_annuler_et_supprimer_mettent_la_liste_a_jour(application, tmp_path):
     f.bouton_supprimer.click()
     assert f.liste.count() == 0
     assert len(f.session) == 0
+
+
+# -- Sélecteur de vidéo + segments -----------------------------------------
+
+
+def construire_plage(
+    application,
+    tmp_path,
+    debut=0,
+    fin=900,
+    nb_frames=7399,
+    chemin="D:/x/manif_test.mp4",
+    sortie=None,
+):
+    source = FausseSource(debut, fin)
+    f = FenetreAnnotation(
+        source=source,
+        sortie=sortie if sortie is not None else tmp_path / "ann.txt",
+        debut=debut,
+        fin=fin,
+        chemin=chemin,
+        nb_frames=nb_frames,
+    )
+    f.resize(1200, 800)
+    f.show()
+    application.processEvents()
+    return f
+
+
+def test_demarre_sur_le_premier_segment(application, tmp_path):
+    f = construire_plage(application, tmp_path)
+    assert (f.debut, f.fin) == (0, 900)
+    assert f.champ_debut.value() == 0
+    assert f.champ_fin.value() == 900
+    assert f.case_tout.isChecked() is False
+    assert f.bouton_segment_suivant.isEnabled() is True
+
+
+def test_segment_suivant_enchaine_sans_revenir_au_debut(application, tmp_path):
+    f = construire_plage(application, tmp_path)
+    f.bouton_segment_suivant.click()
+    assert (f.debut, f.fin) == (900, 1800)
+    assert (f.source.debut, f.source.fin) == (900, 1800)
+    assert f.champ_debut.value() == 900
+    assert f.champ_fin.value() == 1800
+
+
+def test_segment_suivant_s_arrete_a_la_fin(application, tmp_path):
+    f = construire_plage(application, tmp_path, debut=7000, fin=7399, nb_frames=7399)
+    f.bouton_segment_suivant.click()
+    assert (f.debut, f.fin) == (7000, 7399)
+
+
+def test_case_toute_la_video_regle_la_plage(application, tmp_path):
+    f = construire_plage(application, tmp_path)
+    f.case_tout.setChecked(True)
+    assert (f.debut, f.fin) == (0, 7399)
+    assert f.champ_debut.isEnabled() is False
+    assert f.champ_fin.isEnabled() is False
+    assert f.bouton_segment_suivant.isEnabled() is False
+
+
+def test_champs_reglent_la_plage(application, tmp_path):
+    f = construire_plage(application, tmp_path)
+    f.champ_debut.setValue(3600)
+    f.champ_fin.setValue(4500)
+    assert (f.debut, f.fin) == (3600, 4500)
+
+
+def test_charger_video_repart_au_premier_segment(application, tmp_path):
+    f = construire_plage(application, tmp_path)
+    f.charger_video("D:/x/test57.mp4", source=FausseSource(0, 5000), nb_frames=5000)
+    assert (f.debut, f.fin) == (0, 900)
+    assert f.nb_frames == 5000
+    assert "test57" in f.sortie.name
+
+
+def test_nom_sortie_video_hors_reference_porte_le_nom(application, tmp_path):
+    f = FenetreAnnotation(
+        source=FausseSource(0, 900),
+        debut=0,
+        fin=900,
+        chemin="D:/x/test57.mp4",
+        nb_frames=7399,
+    )
+    f.show()
+    application.processEvents()
+    assert "test57" in f.sortie.name
+    assert f.sortie.name.endswith("_operateur.txt")
+
+
+def test_nom_sortie_reference_garde_le_nom_historique(application, tmp_path):
+    from tools import verite_terrain as banc
+
+    f = FenetreAnnotation(
+        source=FausseSource(3600, 4500),
+        debut=3600,
+        fin=4500,
+        chemin=banc.VIDEO_REF,
+        nb_frames=7399,
+    )
+    f.show()
+    application.processEvents()
+    assert f.sortie.name == "segment_3600-4500_operateur.txt"
+
+
+def test_sans_video_reference_la_fenetre_s_ouvre_quand_meme(application, tmp_path):
+    # Vidéo de référence absente : la fenêtre doit s'ouvrir (source vide) pour
+    # que le bouton « Ouvrir une vidéo… » reste atteignable.
+    f = FenetreAnnotation(
+        chemin="D:/nexistepas.mp4", debut=0, fin=900, nb_frames=1000
+    )
+    f.show()
+    application.processEvents()
+    assert f._sans_video is True
+    assert f.video is not None

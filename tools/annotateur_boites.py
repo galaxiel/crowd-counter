@@ -31,11 +31,14 @@ from PySide6.QtCore import QRect, Qt, QTimer, Signal  # noqa: E402
 from PySide6.QtGui import QColor, QPainter  # noqa: E402
 from PySide6.QtWidgets import (  # noqa: E402
     QApplication,
+    QCheckBox,
+    QFileDialog,
     QHBoxLayout,
     QLabel,
     QListWidget,
     QPushButton,
     QSlider,
+    QSpinBox,
     QVBoxLayout,
     QWidget,
 )
@@ -44,7 +47,7 @@ from compteur.config import Config, resoudre_modele  # noqa: E402
 from compteur.detecteur import Detecteur, charger_modele  # noqa: E402
 from interface.widgets_video import WidgetVideo  # noqa: E402
 from tools import verite_terrain as banc  # noqa: E402
-from tools.annotateur import SourceVideo  # noqa: E402
+from tools.annotateur import SourceVide, SourceVideo  # noqa: E402
 
 #: Côté minimal d'une boîte, en pixels image : en dessous, le glissé est un
 #: clic accidentel, pas une annotation.
@@ -216,20 +219,60 @@ class FenetreBoites(QWidget):
         dossier=None,
         debut: int = 0,
         fin: int = banc.FIN_REF,
+        chemin: str | pathlib.Path | None = None,
+        nb_frames: int | None = None,
         parent=None,
     ) -> None:
         super().__init__(parent)
         self.debut, self.fin = debut, fin
-        self.source = source if source is not None else SourceVideo(debut, fin)
+        self.chemin = str(chemin) if chemin is not None else banc.VIDEO_REF
+        self.nb_frames = int(nb_frames) if nb_frames is not None else max(fin, 1)
+        self._sans_video = False
+        if source is None:
+            try:
+                source = SourceVideo(debut, fin, self.chemin)
+            except Exception:
+                source = SourceVide(debut, fin)
+                self._sans_video = True
+        self.source = source
         self.detecteur = detecteur
-        self.dossier = pathlib.Path(dossier) if dossier is not None else DOSSIER_DEFAUT
+        self.dossier = (
+            pathlib.Path(dossier)
+            if dossier is not None
+            else self._nom_dossier(self.chemin)
+        )
         self.session = SessionBoites()
         self.en_cours = False
         self._image_brute = None
 
-        self.setWindowTitle(f"Annotateur de boîtes — entraînement ({debut}–{fin})")
+        self._maj_titre()
         self.video = WidgetBoites()
         self.video.boite_tracee.connect(self._sur_boite)
+
+        # Rangée HAUT : choisir la vidéo et l'étendue (toute la vidéo ou un
+        # segment). Une autre vidéo exporte son dataset dans son propre
+        # sous-dossier (entrainement/<nom_video>/) pour ne pas mélanger les
+        # frames de deux vidéos.
+        self.bouton_ouvrir_video = QPushButton("Ouvrir une vidéo…")
+        self.bouton_ouvrir_video.clicked.connect(self._choisir_video)
+        self.case_tout = QCheckBox("Toute la vidéo")
+        self.case_tout.toggled.connect(self._sur_case_tout)
+        self.champ_debut = QSpinBox()
+        self.champ_debut.setRange(0, max(0, self.nb_frames - 1))
+        self.champ_debut.setValue(debut)
+        self.champ_debut.valueChanged.connect(self._sur_champs)
+        self.champ_fin = QSpinBox()
+        self.champ_fin.setRange(1, self.nb_frames)
+        self.champ_fin.setValue(fin)
+        self.champ_fin.valueChanged.connect(self._sur_champs)
+        rangee_haut = QHBoxLayout()
+        rangee_haut.addWidget(self.bouton_ouvrir_video)
+        rangee_haut.addWidget(self.case_tout)
+        rangee_haut.addWidget(QLabel("de"))
+        rangee_haut.addWidget(self.champ_debut)
+        rangee_haut.addWidget(QLabel("à"))
+        rangee_haut.addWidget(self.champ_fin)
+        rangee_haut.addStretch(1)
 
         self.curseur = QSlider(Qt.Orientation.Horizontal)
         self.curseur.setRange(debut, fin - 1)
@@ -279,6 +322,7 @@ class FenetreBoites(QWidget):
         bas.addLayout(colonne_boutons)
 
         racine = QVBoxLayout(self)
+        racine.addLayout(rangee_haut)
         racine.addWidget(self.video, stretch=1)
         racine.addWidget(self.curseur)
         racine.addLayout(rangee)
@@ -290,6 +334,118 @@ class FenetreBoites(QWidget):
         img = self.source.aller_a(debut)
         if img is not None:
             self._afficher(img)
+        if self._sans_video:
+            self.label_aide.setText(
+                "Aucune vidéo ouverte. Clique sur « Ouvrir une vidéo… » pour "
+                "commencer — puis glisse des boîtes sur les têtes visibles."
+            )
+
+    # -- Vidéo / étendue ---------------------------------------------------
+
+    def _nom_dossier(self, chemin: str | pathlib.Path) -> pathlib.Path:
+        """Dossier d'export du dataset : séparé par vidéo (hors référence).
+
+        Mélanger les frames de deux vidéos dans le même dossier ferait écraser
+        des `frame_XXXXXX.jpg` homonymes — chaque vidéo a donc son sous-dossier.
+        """
+        if str(chemin) == str(banc.VIDEO_REF):
+            return DOSSIER_DEFAUT
+        return DOSSIER_DEFAUT / pathlib.Path(chemin).stem
+
+    def _maj_titre(self) -> None:
+        nom = pathlib.Path(self.chemin).name
+        self.setWindowTitle(
+            f"Annotateur de boîtes — entraînement ({self.debut}–{self.fin}) · {nom}"
+        )
+
+    def _configurer_plage(self, debut: int, fin: int) -> None:
+        debut = max(0, int(debut))
+        fin = max(debut + 1, int(fin))
+        self.debut, self.fin = debut, fin
+        self.source.debut = debut
+        self.source.fin = fin
+        for champ, valeur in ((self.champ_debut, debut), (self.champ_fin, fin)):
+            champ.blockSignals(True)
+            champ.setValue(valeur)
+            champ.blockSignals(False)
+        self.curseur.blockSignals(True)
+        self.curseur.setRange(debut, max(debut, fin - 1))
+        self.curseur.setValue(debut)
+        self.curseur.blockSignals(False)
+        self._maj_titre()
+        img = self.source.aller_a(debut)
+        if img is not None:
+            self._afficher(img)
+
+    def _sur_case_tout(self, coche: bool) -> None:
+        self.champ_debut.setEnabled(not coche)
+        self.champ_fin.setEnabled(not coche)
+        if coche:
+            self._configurer_plage(0, self.nb_frames)
+        else:
+            self._configurer_plage(0, min(900, self.nb_frames))
+
+    def _sur_champs(self) -> None:
+        debut = self.champ_debut.value()
+        fin = self.champ_fin.value()
+        if fin <= debut:
+            fin = min(debut + 1, self.nb_frames)
+            if fin <= debut:
+                debut = max(0, fin - 1)
+        self._configurer_plage(debut, fin)
+
+    def _choisir_video(self) -> None:
+        chemin, _ = QFileDialog.getOpenFileName(
+            self,
+            "Choisir une vidéo",
+            str(pathlib.Path(self.chemin).parent),
+            "Vidéos (*.mp4 *.avi *.mov *.mkv);;Tous les fichiers (*)",
+        )
+        if chemin:
+            self.charger_video(chemin)
+
+    def charger_video(
+        self,
+        chemin: str | pathlib.Path,
+        source=None,
+        nb_frames: int | None = None,
+    ) -> None:
+        """Charge une nouvelle vidéo : nouveau dossier d'export, session vierge."""
+        if source is None:
+            import cv2
+
+            cap = cv2.VideoCapture(str(chemin))
+            if not cap.isOpened():
+                raise FileNotFoundError(f"vidéo illisible : {chemin}")
+            nb = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+            cap.release()
+            source = SourceVideo(0, nb, chemin)
+            nb_frames = nb
+        if nb_frames is None:
+            nb_frames = max(1, self.fin)
+        self._pause()
+        try:
+            self.source.fermer()
+        except Exception:
+            pass
+        self.source = source
+        self._sans_video = False
+        self.chemin = str(chemin)
+        self.nb_frames = max(1, int(nb_frames))
+        self.dossier = self._nom_dossier(self.chemin)
+        self.session = SessionBoites()
+        self.champ_debut.blockSignals(True)
+        self.champ_debut.setRange(0, max(0, self.nb_frames - 1))
+        self.champ_debut.blockSignals(False)
+        self.champ_fin.blockSignals(True)
+        self.champ_fin.setRange(1, self.nb_frames)
+        self.champ_fin.blockSignals(False)
+        self.case_tout.blockSignals(True)
+        self.case_tout.setChecked(False)
+        self.case_tout.blockSignals(False)
+        self.champ_debut.setEnabled(True)
+        self.champ_fin.setEnabled(True)
+        self._configurer_plage(0, min(900, self.nb_frames))
 
     # -- Affichage ---------------------------------------------------------
 
@@ -427,27 +583,32 @@ def main(argv: list[str] | None = None) -> None:
     import cv2
 
     argv = sys.argv[1:] if argv is None else argv
-    debut, fin = 0, None
+    cap = cv2.VideoCapture(banc.VIDEO_REF)
+    nb_frames = (
+        int(cap.get(cv2.CAP_PROP_FRAME_COUNT)) if cap.isOpened() else banc.FIN_REF
+    )
+    cap.release()
+    debut, fin = 0, nb_frames
     if len(argv) == 2:
         debut, fin = int(argv[0]), int(argv[1])
     elif argv:
         raise SystemExit("usage : python tools/annotateur_boites.py [debut fin]")
-    if fin is None:
-        cap = cv2.VideoCapture(banc.VIDEO_REF)
-        if not cap.isOpened():
-            raise SystemExit(f"vidéo illisible : {banc.VIDEO_REF}")
-        fin = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-        cap.release()
 
     detecteur = None
-    chemin = resoudre_modele(Config().modele)
-    if chemin is not None:
-        detecteur = Detecteur(charger_modele(str(chemin)), Config())
+    chemin_modele = resoudre_modele(Config().modele)
+    if chemin_modele is not None:
+        detecteur = Detecteur(charger_modele(str(chemin_modele)), Config())
     else:
         print("modèle .onnx introuvable : « Proposer » désactivé, boîtes à la main.")
 
     app = QApplication.instance() or QApplication(sys.argv[:1])
-    fenetre = FenetreBoites(debut=debut, fin=fin, detecteur=detecteur)
+    fenetre = FenetreBoites(
+        debut=debut,
+        fin=fin,
+        detecteur=detecteur,
+        chemin=banc.VIDEO_REF,
+        nb_frames=nb_frames,
+    )
     fenetre.resize(1280, 800)
     fenetre.show()
     raise SystemExit(app.exec())

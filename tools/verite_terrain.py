@@ -206,6 +206,7 @@ def extraire(
     fin: int = FIN_REF,
     sortie: str | pathlib.Path | None = None,
     modele: str | None = None,
+    video: str | None = None,
 ) -> pathlib.Path:
     """Écrit la vidéo lente du segment, avec ligne et numéro de frame.
 
@@ -228,9 +229,10 @@ def extraire(
     sortie = pathlib.Path(sortie)
     sortie.parent.mkdir(parents=True, exist_ok=True)
 
-    cap = cv2.VideoCapture(VIDEO_REF)
+    chemin_video = video or VIDEO_REF
+    cap = cv2.VideoCapture(chemin_video)
     if not cap.isOpened():
-        raise FileNotFoundError(f"vidéo illisible : {VIDEO_REF}")
+        raise FileNotFoundError(f"vidéo illisible : {chemin_video}")
     fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
     largeur = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     hauteur = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
@@ -317,6 +319,7 @@ def comparer(
     tolerance: int = TOLERANCE_DEFAUT,
     imgsz: int | None = None,
     modele: str | None = None,
+    video: str | None = None,
 ) -> dict:
     """Tourne le moteur sur le segment et le compare à l'annotation humaine.
 
@@ -331,22 +334,23 @@ def comparer(
     """
     from mesurer_reference import mesurer  # import paresseux : cv2 au-dessus
 
+    chemin_video = video or VIDEO_REF
     humain = lire_annotations(annotations)
 
     if imgsz is None:
         # Résolution automatique, comme au chargement d'une vidéo dans l'app.
         import cv2
 
-        cap = cv2.VideoCapture(VIDEO_REF)
+        cap = cv2.VideoCapture(chemin_video)
         if not cap.isOpened():
-            raise FileNotFoundError(f"vidéo illisible : {VIDEO_REF}")
+            raise FileNotFoundError(f"vidéo illisible : {chemin_video}")
         largeur = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
         hauteur = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
         cap.release()
         imgsz = taille_entree_automatique(largeur, hauteur)
 
     resultat = mesurer(
-        VIDEO_REF, debut, fin, modele=modele, imgsz=imgsz, verbose=True
+        chemin_video, debut, fin, modele=modele, imgsz=imgsz, verbose=True
     )
     moteur = list(resultat["evenements"])
     rapprochement = apparier(humain, moteur, tolerance)
@@ -403,6 +407,11 @@ def main() -> None:
     p_ext.add_argument("debut", nargs="?", type=int, default=DEBUT_REF)
     p_ext.add_argument("fin", nargs="?", type=int, default=FIN_REF)
     p_ext.add_argument("--sortie", default=None)
+    p_ext.add_argument(
+        "--video",
+        default=None,
+        help="vidéo à traiter (défaut : la référence, D:\\Bureau\\manif_test.mp4)",
+    )
 
     p_cmp = sous.add_parser("comparer", help="moteur vs annotation humaine")
     p_cmp.add_argument("annotations")
@@ -416,11 +425,16 @@ def main() -> None:
         help="par défaut : la résolution automatique de l'application",
     )
     p_cmp.add_argument("--modele", default=None)
+    p_cmp.add_argument(
+        "--video",
+        default=None,
+        help="vidéo à comparer (défaut : la référence, D:\\Bureau\\manif_test.mp4)",
+    )
 
     args = parser.parse_args()
 
     if args.commande == "extraire":
-        chemin = extraire(args.debut, args.fin, args.sortie)
+        chemin = extraire(args.debut, args.fin, args.sortie, video=args.video)
         modele = DOSSIER_BANC / f"segment_{args.debut}-{args.fin}.txt"
         ecrire_modele_annotation(modele)
         print(f"annotation : {modele} (à compléter à la main)")
@@ -435,6 +449,7 @@ def main() -> None:
         tolerance=args.tolerance,
         imgsz=args.imgsz,
         modele=args.modele,
+        video=args.video,
     )
     print()
     _afficher(resultat)

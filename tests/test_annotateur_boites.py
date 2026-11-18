@@ -240,3 +240,89 @@ def test_enregistrer_ecrit_le_dataset(application, tmp_path):
     assert (dossier / "images" / "frame_003600.jpg").exists()
     texte = (dossier / "labels" / "frame_003600.txt").read_text(encoding="utf-8")
     assert SessionBoites.depuis_yolo(texte, 1280, 720) == f.session.boites(3600)
+
+
+# -- Sélecteur de vidéo + étendue ------------------------------------------
+
+
+def construire_plage(
+    application, tmp_path, debut=0, fin=900, nb_frames=7399, chemin="D:/x/manif_test.mp4"
+):
+    f = FenetreBoites(
+        source=FausseSource(debut, fin),
+        dossier=tmp_path / "ds",
+        debut=debut,
+        fin=fin,
+        chemin=chemin,
+        nb_frames=nb_frames,
+    )
+    f.resize(1200, 800)
+    f.show()
+    application.processEvents()
+    return f
+
+
+def test_case_toute_la_video_regle_la_plage(application, tmp_path):
+    f = construire_plage(application, tmp_path)
+    f.case_tout.setChecked(True)
+    assert (f.debut, f.fin) == (0, 7399)
+    assert f.champ_debut.isEnabled() is False
+    assert f.champ_fin.isEnabled() is False
+
+
+def test_champs_reglent_la_plage(application, tmp_path):
+    f = construire_plage(application, tmp_path)
+    f.champ_debut.setValue(3600)
+    f.champ_fin.setValue(4500)
+    assert (f.debut, f.fin) == (3600, 4500)
+
+
+def test_dossier_export_separe_par_video(application, tmp_path):
+    f = FenetreBoites(
+        source=FausseSource(0, 900),
+        debut=0,
+        fin=900,
+        chemin="D:/x/test57.mp4",
+        nb_frames=7399,
+    )
+    f.show()
+    application.processEvents()
+    assert f.dossier.name == "test57"
+
+
+def test_dossier_export_reference_garde_entrainement(application, tmp_path):
+    from tools import verite_terrain as banc
+
+    f = FenetreBoites(
+        source=FausseSource(0, 900),
+        debut=0,
+        fin=900,
+        chemin=banc.VIDEO_REF,
+        nb_frames=7399,
+    )
+    f.show()
+    application.processEvents()
+    assert f.dossier.name == "entrainement"
+
+
+def test_charger_video_change_dossier_et_vide_la_session(application, tmp_path):
+    f = construire_plage(application, tmp_path)
+    glisser(f, application, *coins(f))
+    assert f.liste.count() == 1
+    f.charger_video("D:/x/test57.mp4", source=FausseSource(0, 5000), nb_frames=5000)
+    assert f.dossier.name == "test57"
+    assert f.session.frames_annotees() == []
+    assert (f.debut, f.fin) == (0, 900)
+
+
+def test_sans_video_reference_la_fenetre_s_ouvre_quand_meme(application, tmp_path):
+    f = FenetreBoites(
+        dossier=tmp_path / "ds",
+        debut=0,
+        fin=900,
+        chemin="D:/nexistepas.mp4",
+        nb_frames=1000,
+    )
+    f.show()
+    application.processEvents()
+    assert f._sans_video is True
