@@ -41,3 +41,5 @@ without focus. The counting engine (IoU matching) is unchanged.
 - The annotation tools now open even without a reference video (black screen +
   prompt to "Open a video…"): `D:\Bureau\manif_test.mp4` may be absent on the
   machine.
+
+**SHA-256**: 1c22ee22e5350c3e9ea9956bc9747cf5d0651157191439262958c4c903f17cd7
