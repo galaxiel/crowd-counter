@@ -21,7 +21,8 @@ import sys
 # que `compteur`, `interface` et `tools` soient importables.
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 
-from PySide6.QtCore import Qt, QTimer  # noqa: E402
+from PySide6.QtCore import Qt, QTimer, QUrl  # noqa: E402
+from PySide6.QtGui import QDesktopServices  # noqa: E402
 from PySide6.QtWidgets import (  # noqa: E402
     QApplication,
     QCheckBox,
@@ -43,7 +44,7 @@ from tools import verite_terrain as banc  # noqa: E402
 
 #: Vitesses de lecture proposées. 0,5× par défaut : 15 i/s effectives, assez
 #: lent pour voir le franchissement, assez rapide pour parcourir le segment.
-VITESSES = [("0,25×", 0.25), ("0,5×", 0.5), ("1×", 1.0)]
+VITESSES = [("0,15×", 0.15), ("0,25×", 0.25), ("0,5×", 0.5), ("1×", 1.0)]
 
 #: Longueur du premier segment et du pas « Segment suivant », en frames. 900
 #: = la longueur du créneau de référence validé (3600-4500) ; l'opérateur reste
@@ -316,7 +317,7 @@ class FenetreAnnotation(QWidget):
         self.combo_vitesse = QComboBox()
         for texte, _ in VITESSES:
             self.combo_vitesse.addItem(texte)
-        self.combo_vitesse.setCurrentIndex(1)
+        self.combo_vitesse.setCurrentIndex(2)  # 0,5× par défaut (indice de VITESSES)
         self.label_frame = QLabel()
         self.bouton_arriere.clicked.connect(self._pas_arriere)
         self.bouton_lecture.clicked.connect(self._basculer_lecture)
@@ -326,8 +327,9 @@ class FenetreAnnotation(QWidget):
         self.label_compte = QLabel()
         self.liste = QListWidget()
         self.bouton_annuler = QPushButton("Annuler le dernier")
-        self.bouton_supprimer = QPushButton("Supprimer la sélection")
+        self.bouton_supprimer = QPushButton("Supprimer la plus récente")
         self.bouton_enregistrer = QPushButton("Enregistrer")
+        self.bouton_dossier = QPushButton("Ouvrir le dossier")
         self.label_etat = QLabel(
             "Clic sur une tête SUR la ligne verte = 1 franchissement.\n"
             "« Tracer la ligne » : place la frontière (2 clics) ; "
@@ -338,6 +340,7 @@ class FenetreAnnotation(QWidget):
         self.bouton_annuler.clicked.connect(self._annuler)
         self.bouton_supprimer.clicked.connect(self._supprimer)
         self.bouton_enregistrer.clicked.connect(self._enregistrer)
+        self.bouton_dossier.clicked.connect(self._ouvrir_dossier)
 
         rangee = QHBoxLayout()
         for w in (
@@ -357,6 +360,7 @@ class FenetreAnnotation(QWidget):
             self.bouton_annuler,
             self.bouton_supprimer,
             self.bouton_enregistrer,
+            self.bouton_dossier,
         ):
             colonne_boutons.addWidget(b)
         colonne_boutons.addWidget(self.label_etat)
@@ -561,19 +565,33 @@ class FenetreAnnotation(QWidget):
 
     def _supprimer(self) -> None:
         ligne = self.liste.currentRow()
+        if ligne < 0 and len(self.session):
+            # Rien de sélectionné : retire la PLUS RÉCENTE (comme l'outil boîtes).
+            ligne = len(self.session) - 1
         if ligne >= 0:
             self.session.supprimer(ligne)
             self._maj_liste()
+            self._redessiner_courant()
 
     def _enregistrer(self) -> None:
         self.sortie.parent.mkdir(parents=True, exist_ok=True)
         self.sortie.write_text(self.session.vers_texte(), encoding="utf-8")
-        self.label_etat.setText(f"Enregistré : {len(self.session)} franchissements.")
+        # Le chemin est affiché DANS la fenêtre : le lanceur .bat (pythonw)
+        # n'a pas de console, le print ci-dessous serait invisible.
+        self.label_etat.setText(
+            f"Enregistré : {len(self.session)} franchissements.\n"
+            f"Fichier : {self.sortie}"
+        )
         print(f"annotation : {self.sortie} ({len(self.session)} franchissements)")
         commande = f"python tools/verite_terrain.py comparer {self.sortie.as_posix()}"
         if str(self.chemin) != str(banc.VIDEO_REF):
             commande += f' --video "{self.chemin}"'
         print(f"comparer   : {commande}")
+
+    def _ouvrir_dossier(self) -> None:
+        dossier = self.sortie.parent
+        dossier.mkdir(parents=True, exist_ok=True)
+        QDesktopServices.openUrl(QUrl.fromLocalFile(str(dossier)))
 
     # -- Vidéo / segment ---------------------------------------------------
 

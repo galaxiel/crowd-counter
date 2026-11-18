@@ -27,8 +27,8 @@ import sys
 # que `compteur`, `interface` et `tools` soient importables.
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 
-from PySide6.QtCore import QRect, Qt, QTimer, Signal  # noqa: E402
-from PySide6.QtGui import QColor, QPainter  # noqa: E402
+from PySide6.QtCore import QRect, Qt, QTimer, QUrl, Signal  # noqa: E402
+from PySide6.QtGui import QColor, QDesktopServices, QPainter  # noqa: E402
 from PySide6.QtWidgets import (  # noqa: E402
     QApplication,
     QCheckBox,
@@ -325,19 +325,21 @@ class FenetreBoites(QWidget):
 
         self.label_compte = QLabel()
         self.liste = QListWidget()
-        self.bouton_supprimer = QPushButton("Supprimer la plus ancienne")
+        self.bouton_supprimer = QPushButton("Supprimer la plus récente")
         self.bouton_proposer = QPushButton("Proposer (modèle)")
         self.bouton_enregistrer = QPushButton("Enregistrer le dataset")
+        self.bouton_dossier = QPushButton("Ouvrir le dossier")
         self.label_aide = QLabel(
-            "CLIC sur une tête = boîte de taille standard (la plus rapide).\n"
-            "GLISSE = boîte sur mesure. Boîte déjà posée : le clic est ignoré.\n"
-            "Supprimer : chaque clic enlève la PLUS ANCIENNE (modèle compris).\n"
+            "CLIC sur une tête = boîte standard ; CLIC DANS une boîte = la supprime.\n"
+            "GLISSE = boîte sur mesure (modèle compris pour la suppression).\n"
+            "« Supprimer » retire la plus RÉCENTE d'abord, puis la précédente…\n"
             "Plus de têtes ? baisse la confiance, monte la taille d'entrée."
         )
         self.label_aide.setWordWrap(True)
         self.bouton_supprimer.clicked.connect(self._supprimer)
         self.bouton_proposer.clicked.connect(self._proposer)
         self.bouton_enregistrer.clicked.connect(self._enregistrer)
+        self.bouton_dossier.clicked.connect(self._ouvrir_dossier)
         if self.detecteur is None:
             self.bouton_proposer.setEnabled(False)
             self.bouton_proposer.setToolTip("Modèle .onnx introuvable — boîtes à la main.")
@@ -351,7 +353,12 @@ class FenetreBoites(QWidget):
         colonne_liste.addWidget(self.label_compte)
         colonne_liste.addWidget(self.liste, stretch=1)
         colonne_boutons = QVBoxLayout()
-        for b in (self.bouton_proposer, self.bouton_supprimer, self.bouton_enregistrer):
+        for b in (
+            self.bouton_proposer,
+            self.bouton_supprimer,
+            self.bouton_enregistrer,
+            self.bouton_dossier,
+        ):
             colonne_boutons.addWidget(b)
         colonne_boutons.addWidget(self.label_aide)
         colonne_boutons.addStretch(1)
@@ -588,9 +595,15 @@ class FenetreBoites(QWidget):
         self._ajouter((x1, y1, x2, y2))
 
     def _sur_clic_boite(self, x: int, y: int) -> None:
-        """Clic simple = boîte de taille standard, centrée sur le point."""
+        """Clic : sur une boîte existante -> la supprime ; ailleurs -> en pose une."""
         self._pause()
         if self._image_brute is None:
+            return
+        # Clic À L'INTÉRIEUR d'une boîte = suppression de CETTE boîte.
+        index = self._index_boite_sous(self.source.index, x, y)
+        if index is not None:
+            self.session.supprimer(self.source.index, index)
+            self._redessiner()
             return
         hauteur, largeur = self._image_brute.shape[:2]
         # Taille MESURÉE des boîtes du détecteur sur frames réelles (test57 /
@@ -604,14 +617,24 @@ class FenetreBoites(QWidget):
         y1 = max(0, min(hauteur - h, y - h // 2))
         self._ajouter((x1, y1, x1 + w, y1 + h))
 
+    def _index_boite_sous(self, frame: int, x: int, y: int) -> int | None:
+        """Indice de la boîte (la plus récente si chevauchement) sous le point."""
+        boites = self.session.boites(frame)
+        for i in range(len(boites) - 1, -1, -1):
+            x1, y1, x2, y2 = boites[i]
+            if x1 <= x <= x2 and y1 <= y <= y2:
+                return i
+        return None
+
     def _supprimer(self) -> None:
         boites = self.session.boites(self.source.index)
         if not boites:
             self.label_aide.setText("Aucune boîte à supprimer sur cette image.")
             return
-        # Enlève la PLUS ANCIENNE (première posée), y compris une boîte du
-        # modèle : chaque clic en retire une, dans l'ordre d'ajout.
-        self.session.supprimer(self.source.index, 0)
+        # Enlève la PLUS RÉCENTE (dernière posée), y compris une boîte du
+        # modèle : chaque clic en retire une, de la plus récente à la plus
+        # ancienne.
+        self.session.supprimer(self.source.index, len(boites) - 1)
         self._redessiner()
 
     def _proposer(self) -> None:
@@ -643,6 +666,16 @@ class FenetreBoites(QWidget):
             f"dataset : {self.dossier} "
             f"({len(self.session.frames_annotees())} frames annotées)"
         )
+        # Affiché DANS la fenêtre : le lanceur .bat (pythonw) n'a pas de console.
+        self.label_aide.setText(
+            f"Dataset enregistré : {len(self.session.frames_annotees())} frames.\n"
+            f"Dossier : {self.dossier}"
+        )
+
+    def _ouvrir_dossier(self) -> None:
+        dossier = self.dossier
+        dossier.mkdir(parents=True, exist_ok=True)
+        QDesktopServices.openUrl(QUrl.fromLocalFile(str(dossier)))
 
     # -- Événements Qt ------------------------------------------------------
 

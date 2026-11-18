@@ -372,3 +372,22 @@ def test_ligne_memorisee_rechargee_a_l_ouverture(application, tmp_path):
     f = construire(application, tmp_path)
     assert f.ligne == (10.0, 20.0, 30.0, 40.0)
     assert f.sens == 1
+
+
+def test_supprimer_sans_selection_retire_la_plus_recente(application, tmp_path):
+    f = construire(application, tmp_path)
+    cliquer_video(f, application)  # frame 3600
+    f.bouton_avant.click()
+    cliquer_video(f, application)  # frame 3601
+    assert len(f.session) == 2
+    f.bouton_supprimer.click()  # aucune ligne sélectionnée -> retire la plus récente
+    assert len(f.session) == 1
+    assert f.session.entrees[0][0] == 3600
+
+
+def test_enregistrer_affiche_le_chemin_dans_la_fenetre(application, tmp_path):
+    sortie = tmp_path / "ann.txt"
+    f = construire(application, tmp_path, sortie=sortie)
+    cliquer_video(f, application)
+    f.bouton_enregistrer.click()
+    assert str(sortie) in f.label_etat.text()

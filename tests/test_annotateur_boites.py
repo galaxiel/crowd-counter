@@ -197,13 +197,14 @@ def test_clic_sans_glisse_cree_une_boite_par_defaut(application, tmp_path):
     assert f.liste.count() == 1
 
 
-def test_clic_sur_une_tete_deja_annotee_est_ignore(application, tmp_path):
+def test_clic_dans_une_boite_la_supprime(application, tmp_path):
     f = construire(application, tmp_path)
     c = f.video.rect().center()
-    glisser(f, application, (c.x(), c.y()), (c.x(), c.y()))
-    glisser(f, application, (c.x(), c.y()), (c.x(), c.y()))
+    glisser(f, application, (c.x(), c.y()), (c.x(), c.y()))  # pose une boîte
     assert len(f.session.boites(3600)) == 1
-    assert f.liste.count() == 1
+    glisser(f, application, (c.x(), c.y()), (c.x(), c.y()))  # clic dedans -> supprime
+    assert f.session.boites(3600) == []
+    assert f.liste.count() == 0
 
 
 def test_supprimer_enleve_la_boite_qui_vient_d_etre_posee(application, tmp_path):
@@ -354,19 +355,17 @@ def test_sans_video_reference_la_fenetre_s_ouvre_quand_meme(application, tmp_pat
     assert f._sans_video is True
 
 
-def test_supprimer_enleve_la_plus_ancienne_la_premiere(application, tmp_path):
+def test_supprimer_enleve_la_plus_recente_la_premiere(application, tmp_path):
     f = construire(application, tmp_path, detecteur=FauxDetecteur())
-    f.bouton_proposer.click()  # boîte du modèle, la plus ancienne
+    f.bouton_proposer.click()  # boîte du modèle (posée en premier)
     assert len(f.session.boites(3600)) == 1
     boite_modele = f.session.boites(3600)[0]
     c = f.video.rect().center()
-    glisser(f, application, (c.x(), c.y()), (c.x(), c.y()))
+    glisser(f, application, (c.x(), c.y()), (c.x(), c.y()))  # boîte manuelle (récente)
     assert len(f.session.boites(3600)) == 2
-    boite_manuelle = f.session.boites(3600)[1]
     f.bouton_supprimer.click()
-    # La PLUS ANCIENNE (celle du modèle) part en premier.
-    assert f.session.boites(3600) == [boite_manuelle]
-    assert boite_modele not in f.session.boites(3600)
+    # La PLUS RÉCENTE (manuelle) part d'abord ; la boîte du modèle reste.
+    assert f.session.boites(3600) == [boite_modele]
 
 
 class FauxDetecteurConfigurable:
@@ -394,3 +393,10 @@ def test_proposer_applique_les_reglages_de_detection(application, tmp_path):
     assert abs(det.config.seuil_confiance - 0.10) < 1e-9
     assert det.config.taille_entree == 1280
     assert det.config.taille_min_px == 2
+
+
+def test_enregistrer_affiche_le_dossier_dans_la_fenetre(application, tmp_path):
+    f = construire(application, tmp_path)
+    glisser(f, application, *coins(f))
+    f.bouton_enregistrer.click()
+    assert str(tmp_path / "ds") in f.label_aide.text()
