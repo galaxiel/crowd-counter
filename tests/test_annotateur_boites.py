@@ -183,10 +183,33 @@ def test_glisse_trace_une_boite_en_pixels_image(application, tmp_path):
     assert f.liste.count() == 1
 
 
-def test_clic_sans_glisse_ne_cree_pas_de_boite(application, tmp_path):
+def test_clic_sans_glisse_cree_une_boite_par_defaut(application, tmp_path):
     f = construire(application, tmp_path)
     c = f.video.rect().center()
     glisser(f, application, (c.x(), c.y()), (c.x(), c.y()))
+    boites = f.session.boites(3600)
+    assert len(boites) == 1
+    x1, y1, x2, y2 = boites[0]
+    assert x2 - x1 >= 16 and y2 - y1 >= 20
+    assert f.liste.count() == 1
+
+
+def test_clic_sur_une_tete_deja_annotee_est_ignore(application, tmp_path):
+    f = construire(application, tmp_path)
+    c = f.video.rect().center()
+    glisser(f, application, (c.x(), c.y()), (c.x(), c.y()))
+    glisser(f, application, (c.x(), c.y()), (c.x(), c.y()))
+    assert len(f.session.boites(3600)) == 1
+    assert f.liste.count() == 1
+
+
+def test_supprimer_enleve_la_boite_qui_vient_d_etre_posee(application, tmp_path):
+    f = construire(application, tmp_path)
+    c = f.video.rect().center()
+    glisser(f, application, (c.x(), c.y()), (c.x(), c.y()))
+    assert f.liste.count() == 1
+    # La boîte neuve est sélectionnée d'office : Supprimer l'enlève.
+    f.bouton_supprimer.click()
     assert f.session.boites(3600) == []
     assert f.liste.count() == 0
 

@@ -47,6 +47,7 @@ Usage :
 from __future__ import annotations
 
 import argparse
+import json
 import pathlib
 import sys
 
@@ -80,6 +81,71 @@ DOSSIER_BANC = pathlib.Path(__file__).resolve().parent.parent / "verite_terrain"
 #: petit pour ne pas apparier deux franchissements distincts d'une même
 #: seconde.
 TOLERANCE_DEFAUT = 30
+
+#: Fichier des lignes tracées par l'opérateur, une par vidéo (clé = chemin
+#: résolu). Une fois notée, la ligne est réutilisée par `comparer`/`extraire`
+#: sur cette même vidéo : l'humain et le moteur comptent la même frontière,
+#: même quand on change les paramètres pour une batterie de tests.
+LIGNES_FICHIER = DOSSIER_BANC / "lignes.json"
+
+
+def _cle_video(chemin: str | pathlib.Path) -> str:
+    return pathlib.Path(chemin).resolve().as_posix()
+
+
+def charger_ligne(
+    video: str | pathlib.Path, fichier: str | pathlib.Path | None = None
+) -> tuple[tuple[float, float, float, float], int] | None:
+    """Ligne (pts, sens) mémorisée pour cette vidéo, ou None."""
+    chemin = pathlib.Path(fichier) if fichier is not None else LIGNES_FICHIER
+    try:
+        data = json.loads(chemin.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    entree = data.get(_cle_video(video))
+    if not entree or "ligne" not in entree:
+        return None
+    pts = tuple(float(v) for v in entree["ligne"])
+    if len(pts) != 4:
+        return None
+    return pts, int(entree.get("sens", -1))
+
+
+def enregistrer_ligne(
+    video: str | pathlib.Path,
+    ligne: tuple[float, float, float, float],
+    sens: int = -1,
+    fichier: str | pathlib.Path | None = None,
+) -> pathlib.Path:
+    """Mémorise la ligne (pts, sens) de cette vidéo. Retourne le fichier."""
+    chemin = pathlib.Path(fichier) if fichier is not None else LIGNES_FICHIER
+    chemin.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        data = json.loads(chemin.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        data = {}
+    data[_cle_video(video)] = {"ligne": [float(v) for v in ligne], "sens": int(sens)}
+    chemin.write_text(
+        json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
+    )
+    return chemin
+
+
+def _ligne_effective(
+    video: str | pathlib.Path,
+    ligne: tuple[float, float, float, float] | None,
+    sens: int | None,
+    fichier: str | pathlib.Path | None = None,
+) -> tuple[tuple[float, float, float, float], int]:
+    """Ligne à utiliser : explicite > mémorisée pour la vidéo > référence."""
+    if ligne is not None and sens is not None:
+        return tuple(ligne), int(sens)
+    stockee = charger_ligne(video, fichier)
+    if stockee is not None:
+        return (tuple(ligne) if ligne is not None else stockee[0],
+                int(sens) if sens is not None else stockee[1])
+    return (tuple(ligne) if ligne is not None else LIGNE_REF,
+            -1 if sens is None else int(sens))
 
 
 # -- Annotations (pur, testé sans vidéo) -----------------------------------
@@ -207,6 +273,8 @@ def extraire(
     sortie: str | pathlib.Path | None = None,
     modele: str | None = None,
     video: str | None = None,
+    ligne: tuple[float, float, float, float] | None = None,
+    sens: int | None = None,
 ) -> pathlib.Path:
     """Écrit la vidéo lente du segment, avec ligne et numéro de frame.
 
@@ -221,8 +289,9 @@ def extraire(
     """
     import cv2
 
-    config = Config(ligne=LIGNE_REF, sens=-1, modele=modele or Config().modele)
-    ligne = _ligne_de_reference(config)
+    pts_ligne, sens_ligne = _ligne_effective(video or VIDEO_REF, ligne, sens)
+    config = Config(ligne=pts_ligne, sens=sens_ligne, modele=modele or Config().modele)
+    ligne_obj = _ligne_de_reference(config)
 
     if sortie is None:
         sortie = DOSSIER_BANC / f"segment_{debut}-{fin}_lent.mp4"
@@ -250,7 +319,7 @@ def extraire(
         ok, img = cap.read()
         if not ok:
             break
-        cadre = ligne.dessiner(img)
+        cadre = ligne_obj.dessiner(img)
         _ecrire_frame_number(cadre, index)
         for _ in range(3):
             ecrivain.write(cadre)
@@ -320,6 +389,8 @@ def comparer(
     imgsz: int | None = None,
     modele: str | None = None,
     video: str | None = None,
+    ligne: tuple[float, float, float, float] | None = None,
+    sens: int | None = None,
 ) -> dict:
     """Tourne le moteur sur le segment et le compare à l'annotation humaine.
 
@@ -335,6 +406,7 @@ def comparer(
     from mesurer_reference import mesurer  # import paresseux : cv2 au-dessus
 
     chemin_video = video or VIDEO_REF
+    pts_ligne, sens_ligne = _ligne_effective(chemin_video, ligne, sens)
     humain = lire_annotations(annotations)
 
     if imgsz is None:
@@ -350,7 +422,14 @@ def comparer(
         imgsz = taille_entree_automatique(largeur, hauteur)
 
     resultat = mesurer(
-        chemin_video, debut, fin, modele=modele, imgsz=imgsz, verbose=True
+        chemin_video,
+        debut,
+        fin,
+        modele=modele,
+        imgsz=imgsz,
+        verbose=True,
+        ligne=pts_ligne,
+        sens=sens_ligne,
     )
     moteur = list(resultat["evenements"])
     rapprochement = apparier(humain, moteur, tolerance)
@@ -397,6 +476,14 @@ def _afficher(r: dict) -> None:
         print("ÉCART ZÉRO : chaque franchissement est vu des deux côtés.")
 
 
+def _lire_ligne(texte: str) -> tuple[float, float, float, float]:
+    """`"x1,y1,x2,y2"` -> tuple. Accepte aussi le point-virgule comme séparateur."""
+    vals = [float(v) for v in texte.replace(";", ",").split(",")]
+    if len(vals) != 4:
+        raise argparse.ArgumentTypeError("ligne attendue : x1,y1,x2,y2")
+    return tuple(vals)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     sous = parser.add_subparsers(dest="commande", required=True)
@@ -412,6 +499,8 @@ def main() -> None:
         default=None,
         help="vidéo à traiter (défaut : la référence, D:\\Bureau\\manif_test.mp4)",
     )
+    p_ext.add_argument("--ligne", type=_lire_ligne, default=None)
+    p_ext.add_argument("--sens", type=int, choices=(-1, 1), default=None)
 
     p_cmp = sous.add_parser("comparer", help="moteur vs annotation humaine")
     p_cmp.add_argument("annotations")
@@ -430,11 +519,20 @@ def main() -> None:
         default=None,
         help="vidéo à comparer (défaut : la référence, D:\\Bureau\\manif_test.mp4)",
     )
+    p_cmp.add_argument("--ligne", type=_lire_ligne, default=None)
+    p_cmp.add_argument("--sens", type=int, choices=(-1, 1), default=None)
 
     args = parser.parse_args()
 
     if args.commande == "extraire":
-        chemin = extraire(args.debut, args.fin, args.sortie, video=args.video)
+        chemin = extraire(
+            args.debut,
+            args.fin,
+            args.sortie,
+            video=args.video,
+            ligne=args.ligne,
+            sens=args.sens,
+        )
         modele = DOSSIER_BANC / f"segment_{args.debut}-{args.fin}.txt"
         ecrire_modele_annotation(modele)
         print(f"annotation : {modele} (à compléter à la main)")
@@ -450,6 +548,8 @@ def main() -> None:
         imgsz=args.imgsz,
         modele=args.modele,
         video=args.video,
+        ligne=args.ligne,
+        sens=args.sens,
     )
     print()
     _afficher(resultat)

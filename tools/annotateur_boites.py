@@ -145,6 +145,10 @@ class WidgetBoites(WidgetVideo):
     """
 
     boite_tracee = Signal(int, int, int, int)
+    #: Clic simple (sans glissé) : le point cliqué, en pixels image. La fenêtre
+    #: en fait une boîte de taille standard centrée — plus rapide que glisser
+    #: pour une tête « normale ».
+    clic_boite = Signal(int, int)
 
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
@@ -181,6 +185,9 @@ class WidgetBoites(WidgetVideo):
         x1, x2 = sorted((a[0], b[0]))
         y1, y2 = sorted((a[1], b[1]))
         if x2 - x1 < MIN_COTE_PX or y2 - y1 < MIN_COTE_PX:
+            # Trop petit pour être un vrai glissé : c'est un CLIC. On émet le
+            # point, la fenêtre posera une boîte de taille standard.
+            self.clic_boite.emit(*a)
             return
         self.boite_tracee.emit(x1, y1, x2, y2)
 
@@ -248,6 +255,7 @@ class FenetreBoites(QWidget):
         self._maj_titre()
         self.video = WidgetBoites()
         self.video.boite_tracee.connect(self._sur_boite)
+        self.video.clic_boite.connect(self._sur_clic_boite)
 
         # Rangée HAUT : choisir la vidéo et l'étendue (toute la vidéo ou un
         # segment). Une autre vidéo exporte son dataset dans son propre
@@ -293,8 +301,9 @@ class FenetreBoites(QWidget):
         self.bouton_proposer = QPushButton("Proposer (modèle)")
         self.bouton_enregistrer = QPushButton("Enregistrer le dataset")
         self.label_aide = QLabel(
-            "Glisse une boîte sur la tête, au moment où elle est VISIBLE\n"
-            "(pas forcément à la ligne). Espace : lecture/pause · ←/→ : frame."
+            "CLIC sur une tête = boîte de taille standard (la plus rapide).\n"
+            "GLISSE = boîte sur mesure. Boîte déjà posée : le clic est ignoré.\n"
+            "Pour supprimer : sélectionne dans la liste (à droite) puis Supprimer."
         )
         self.label_aide.setWordWrap(True)
         self.bouton_supprimer.clicked.connect(self._supprimer)
@@ -528,25 +537,61 @@ class FenetreBoites(QWidget):
 
     # -- Annotation --------------------------------------------------------
 
+    def _boite_existe(self, frame: int, boite: tuple[int, int, int, int]) -> bool:
+        """Vrai si le centre de `boite` tombe dans une boîte déjà posée."""
+        cx = (boite[0] + boite[2]) / 2
+        cy = (boite[1] + boite[3]) / 2
+        for x1, y1, x2, y2 in self.session.boites(frame):
+            if x1 <= cx <= x2 and y1 <= cy <= y2:
+                return True
+        return False
+
+    def _ajouter(self, boite: tuple[int, int, int, int]) -> None:
+        """Ajoute une boîte au frame courant (sans doublon) et la sélectionne."""
+        if self._boite_existe(self.source.index, boite):
+            return
+        self.session.ajouter(self.source.index, boite)
+        self._redessiner()
+        # Sélectionne la boîte neuve : « Supprimer la sélection » l'enlève
+        # aussitôt, sans avoir à cliquer dans la liste.
+        self.liste.setCurrentRow(self.liste.count() - 1)
+
     def _sur_boite(self, x1: int, y1: int, x2: int, y2: int) -> None:
         self._pause()
-        self.session.ajouter(self.source.index, (x1, y1, x2, y2))
-        self._redessiner()
+        self._ajouter((x1, y1, x2, y2))
+
+    def _sur_clic_boite(self, x: int, y: int) -> None:
+        """Clic simple = boîte de taille standard, centrée sur le point."""
+        self._pause()
+        if self._image_brute is None:
+            return
+        hauteur, largeur = self._image_brute.shape[:2]
+        w = max(16, round(largeur * 0.034))
+        h = max(20, round(hauteur * 0.075))
+        x1 = max(0, min(largeur - w, x - w // 2))
+        y1 = max(0, min(hauteur - h, y - h // 2))
+        self._ajouter((x1, y1, x1 + w, y1 + h))
 
     def _supprimer(self) -> None:
         ligne = self.liste.currentRow()
-        if ligne >= 0:
-            self.session.supprimer(self.source.index, ligne)
-            self._redessiner()
+        if ligne < 0:
+            self.label_aide.setText(
+                "Sélectionne d'abord une boîte dans la liste (à droite), "
+                "puis « Supprimer la sélection »."
+            )
+            return
+        self.session.supprimer(self.source.index, ligne)
+        self._redessiner()
 
     def _proposer(self) -> None:
         if self.detecteur is None or self._image_brute is None:
             return
         self._pause()
+        frame = self.source.index
         for d in self.detecteur.detecter(self._image_brute):
-            self.session.ajouter(
-                self.source.index, (int(d.x1), int(d.y1), int(d.x2), int(d.y2))
-            )
+            boite = (int(d.x1), int(d.y1), int(d.x2), int(d.y2))
+            if not self._boite_existe(frame, boite):
+                self.session.ajouter(frame, boite)
         self._redessiner()
 
     def _enregistrer(self) -> None:

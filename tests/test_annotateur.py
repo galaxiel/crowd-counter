@@ -120,6 +120,7 @@ def construire(application, tmp_path, debut=3600, fin=3700, sortie=None):
         sortie=sortie if sortie is not None else tmp_path / "ann.txt",
         debut=debut,
         fin=fin,
+        dossier_lignes=tmp_path,
     )
     f.resize(1200, 800)
     f.show()
@@ -217,6 +218,7 @@ def construire_plage(
         fin=fin,
         chemin=chemin,
         nb_frames=nb_frames,
+        dossier_lignes=tmp_path,
     )
     f.resize(1200, 800)
     f.show()
@@ -311,3 +313,62 @@ def test_sans_video_reference_la_fenetre_s_ouvre_quand_meme(application, tmp_pat
     application.processEvents()
     assert f._sans_video is True
     assert f.video is not None
+
+
+def test_les_reperes_ne_montrent_que_les_clics_proches(application, tmp_path):
+    f = construire(application, tmp_path)
+    f.session.ajouter(3600, 100, 100)
+    f.session.ajouter(3605, 200, 150)
+    f.session.ajouter(3700, 300, 300)  # trop loin du frame 3605
+    f.session.ajouter(3601)  # sans position : pas de repère
+    proches = f._clics_proches(3605)
+    frames = [p[0] for p in proches]
+    assert 3600 in frames
+    assert 3605 in frames
+    assert 3700 not in frames
+    assert 3601 not in frames
+
+
+# -- Ligne de comptage (tracé + mémorisation) ------------------------------
+
+
+def test_tracer_la_ligne_deux_clics_memorise(application, tmp_path):
+    from tools import verite_terrain as banc
+
+    f = construire(application, tmp_path)
+    assert f.ligne == banc.LIGNE_REF
+    f.bouton_ligne.click()
+    assert f._mode_ligne is True
+    f._sur_clic(100, 120)
+    f._sur_clic(600, 120)
+    assert f._mode_ligne is False
+    assert f.ligne == (100.0, 120.0, 600.0, 120.0)
+    relu = banc.charger_ligne(f.chemin, tmp_path / "lignes.json")
+    assert relu == ((100.0, 120.0, 600.0, 120.0), -1)
+
+
+def test_inverser_le_sens_memorise(application, tmp_path):
+    from tools import verite_terrain as banc
+
+    f = construire(application, tmp_path)
+    assert f.sens == -1
+    f.bouton_sens.click()
+    assert f.sens == 1
+    relu = banc.charger_ligne(f.chemin, tmp_path / "lignes.json")
+    assert relu is not None and relu[1] == 1
+
+
+def test_ligne_memorisee_rechargee_a_l_ouverture(application, tmp_path):
+    import json
+
+    from tools import verite_terrain as banc
+
+    (tmp_path / "lignes.json").write_text(
+        json.dumps(
+            {banc._cle_video(banc.VIDEO_REF): {"ligne": [10, 20, 30, 40], "sens": 1}}
+        ),
+        encoding="utf-8",
+    )
+    f = construire(application, tmp_path)
+    assert f.ligne == (10.0, 20.0, 30.0, 40.0)
+    assert f.sens == 1

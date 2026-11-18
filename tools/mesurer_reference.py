@@ -51,6 +51,8 @@ def mesurer(
     fenetre_lissage: int = 1,
     imgsz: int | None = None,
     verbose: bool = True,
+    ligne: tuple[float, float, float, float] | None = None,
+    sens: int = -1,
 ) -> dict:
     """Décompte `fin - debut` frames par le chemin groupé, et chronomètre.
 
@@ -66,14 +68,19 @@ def mesurer(
         kwargs["fenetre_lissage"] = fenetre_lissage
     if imgsz is not None:
         kwargs["taille_entree"] = int(imgsz)
-    config = Config(ligne=LIGNE_REF, sens=-1, **kwargs)
+    # Ligne par défaut = référence (verticale x=640, sens -1). Le banc peut
+    # fournir la ligne que l'opérateur a tracée pour CETTE vidéo — la même
+    # que celle de l'annotateur — sinon humain et moteur ne comptent pas la
+    # même frontière.
+    pts_ligne = tuple(ligne) if ligne is not None else LIGNE_REF
+    config = Config(ligne=pts_ligne, sens=sens, **kwargs)
 
     detecteur = Detecteur(charger_modele(config.modele, config.peripherique), config)
     compteur = Compteur(config, detecteur, Tracker(config))
     compteur.ajuster_ligne(
         Ligne(
-            (LIGNE_REF[0], LIGNE_REF[1]),
-            (LIGNE_REF[2], LIGNE_REF[3]),
+            (pts_ligne[0], pts_ligne[1]),
+            (pts_ligne[2], pts_ligne[3]),
             epaisseur=config.epaisseur_bande,
             sens=config.sens,
             hysteresis=config.frames_hysteresis,

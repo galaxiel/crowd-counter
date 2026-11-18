@@ -200,3 +200,41 @@ def test_un_ecart_negatif_absolu_sapparie_quand_meme():
     l'humain comme l'inverse."""
     r = vt.apparier([3700], [3695])
     assert r["apparies"] == [(3700, 3695)]
+
+
+# -- Ligne mémorisée par vidéo ---------------------------------------------
+
+
+def test_ligne_aller_retour(tmp_path):
+    fichier = tmp_path / "lignes.json"
+    vt.enregistrer_ligne("D:/x/v.mp4", (1, 2, 3, 4), 1, fichier)
+    assert vt.charger_ligne("D:/x/v.mp4", fichier) == ((1.0, 2.0, 3.0, 4.0), 1)
+
+
+def test_ligne_absente_renvoie_none(tmp_path):
+    assert vt.charger_ligne("D:/x/inconnue.mp4", tmp_path / "lignes.json") is None
+
+
+def test_ligne_effective_priorite(tmp_path):
+    fichier = tmp_path / "lignes.json"
+    vt.enregistrer_ligne("D:/x/v.mp4", (1, 2, 3, 4), -1, fichier)
+    # explicite l'emporte
+    assert vt._ligne_effective("D:/x/v.mp4", (9, 9, 9, 9), 1, fichier) == (
+        (9, 9, 9, 9),
+        1,
+    )
+    # sinon la mémorisée
+    assert vt._ligne_effective("D:/x/v.mp4", None, None, fichier) == (
+        (1.0, 2.0, 3.0, 4.0),
+        -1,
+    )
+    # vidéo inconnue -> référence
+    assert vt._ligne_effective("D:/x/autre.mp4", None, None, fichier) == (
+        vt.LIGNE_REF,
+        -1,
+    )
+
+
+def test_lire_ligne_accepte_virgule_et_point_virgule():
+    assert vt._lire_ligne("1,2,3,4") == (1.0, 2.0, 3.0, 4.0)
+    assert vt._lire_ligne("1;2;3;4") == (1.0, 2.0, 3.0, 4.0)

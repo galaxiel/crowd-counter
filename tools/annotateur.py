@@ -50,6 +50,12 @@ VITESSES = [("0,25×", 0.25), ("0,5×", 0.5), ("1×", 1.0)]
 #: libre de la changer dans les champs début/fin, sans recompiler.
 LONGUEUR_SEGMENT_DEFAUT = 900
 
+#: Fenêtre (en frames) autour du frame courant où l'on redessine TES clics déjà
+#: posés : un repère vert évite de re-cliquer la même personne qui vient de
+#: franchir la ligne. N'affiche JAMAIS le moteur — la vérité terrain reste
+#: humaine et non contaminée.
+PORTEE_REPERE = 15
+
 
 class SessionAnnotation:
     """La liste des clics de l'opérateur, pure et testable sans écran."""
@@ -218,6 +224,7 @@ class FenetreAnnotation(QWidget):
         fin: int = banc.FIN_REF,
         chemin: str | pathlib.Path | None = None,
         nb_frames: int | None = None,
+        dossier_lignes: str | pathlib.Path | None = None,
         parent=None,
     ) -> None:
         super().__init__(parent)
@@ -246,7 +253,19 @@ class FenetreAnnotation(QWidget):
                 self.sortie.read_text(encoding="utf-8")
             )
         self.en_cours = False
-        self._ligne = banc._ligne_de_reference(Config(ligne=banc.LIGNE_REF, sens=-1))
+        # Ligne de comptage : mémorisée PAR VIDÉO (verite_terrain/lignes.json)
+        # pour que `comparer` réutilise la même frontière, même quand on fait une
+        # batterie de tests en changeant les paramètres. Sans mémoire : référence.
+        self._mode_ligne = False
+        self._points_ligne: list[tuple[int, int]] = []
+        self.dossier_lignes = (
+            pathlib.Path(dossier_lignes)
+            if dossier_lignes is not None
+            else banc.DOSSIER_BANC
+        )
+        self._fichier_lignes = self.dossier_lignes / "lignes.json"
+        self.ligne, self.sens = self._ligne_initiale()
+        self._reconstruire_ligne()
 
         self._maj_titre()
         self.video = WidgetVideo()
@@ -270,6 +289,10 @@ class FenetreAnnotation(QWidget):
         self.champ_fin.valueChanged.connect(self._sur_champs)
         self.bouton_segment_suivant = QPushButton("Segment suivant ▶")
         self.bouton_segment_suivant.clicked.connect(self._segment_suivant)
+        self.bouton_ligne = QPushButton("Tracer la ligne")
+        self.bouton_ligne.clicked.connect(self._demarrer_tracage_ligne)
+        self.bouton_sens = QPushButton("Inverser le sens")
+        self.bouton_sens.clicked.connect(self._inverser_sens)
         rangee_haut = QHBoxLayout()
         rangee_haut.addWidget(self.bouton_ouvrir_video)
         rangee_haut.addWidget(self.case_tout)
@@ -278,6 +301,8 @@ class FenetreAnnotation(QWidget):
         rangee_haut.addWidget(QLabel("à"))
         rangee_haut.addWidget(self.champ_fin)
         rangee_haut.addWidget(self.bouton_segment_suivant)
+        rangee_haut.addWidget(self.bouton_ligne)
+        rangee_haut.addWidget(self.bouton_sens)
         rangee_haut.addStretch(1)
 
         self.curseur = QSlider(Qt.Orientation.Horizontal)
@@ -305,6 +330,8 @@ class FenetreAnnotation(QWidget):
         self.bouton_enregistrer = QPushButton("Enregistrer")
         self.label_etat = QLabel(
             "Clic sur une tête SUR la ligne verte = 1 franchissement.\n"
+            "« Tracer la ligne » : place la frontière (2 clics) ; "
+            "« Inverser le sens » règle le côté compté.\n"
             "Espace : lecture/pause · ←/→ : frame par frame."
         )
         self.label_etat.setWordWrap(True)
@@ -363,6 +390,16 @@ class FenetreAnnotation(QWidget):
     def _afficher(self, img) -> None:
         cadre = self._ligne.dessiner(img)
         banc._ecrire_frame_number(cadre, self.source.index)
+        # Repères de TES clics récents (jamais ceux du moteur) : vert vif au
+        # frame courant, vert sombre autour — pour ne pas cliquer deux fois.
+        import cv2
+
+        for frame_repere, x, y in self._clics_proches(self.source.index):
+            couleur = (0, 255, 0) if frame_repere == self.source.index else (0, 150, 0)
+            cv2.circle(cadre, (int(x), int(y)), 9, couleur, 2)
+        # Points déjà posés d'une ligne en cours de tracé.
+        for px, py in self._points_ligne:
+            cv2.circle(cadre, (int(px), int(py)), 10, (255, 160, 0), 2)
         self.video.definir_image(cadre)
         self.curseur.blockSignals(True)
         self.curseur.setValue(self.source.index)
@@ -377,6 +414,14 @@ class FenetreAnnotation(QWidget):
             else:
                 self.liste.addItem(f"{frame}  ({x}, {y})")
         self.label_compte.setText(f"Franchissements : {len(self.session)}")
+
+    def _clics_proches(self, index: int) -> list[tuple[int, int, int]]:
+        """Clics posés à ±PORTEE_REPERE frames, avec leur position cliquée."""
+        return [
+            (f, x, y)
+            for f, x, y in self.session.entrees
+            if x is not None and y is not None and abs(f - index) <= PORTEE_REPERE
+        ]
 
     # -- Lecture -----------------------------------------------------------
 
@@ -432,8 +477,83 @@ class FenetreAnnotation(QWidget):
         # Le clic FIGE la lecture : l'opérateur vient de dire « c'est ici »,
         # la frame affichée ne doit pas défiler sous son clic.
         self._pause()
+        if self._mode_ligne:
+            self._points_ligne.append((int(x), int(y)))
+            if len(self._points_ligne) == 1:
+                self.bouton_ligne.setText("Tracer la ligne… (2/2)")
+                self.label_etat.setText(
+                    "Premier point posé. Clique la deuxième extrémité de la ligne."
+                )
+                self._redessiner_courant()
+                return
+            (x1, y1), (x2, y2) = self._points_ligne
+            if abs(x1 - x2) < 5 and abs(y1 - y2) < 5:
+                # Deux clics au même endroit : ligne dégénérée, on garde le 1er.
+                self._points_ligne = [(x1, y1)]
+                self.label_etat.setText(
+                    "Ligne trop courte : clique un deuxième point plus éloigné."
+                )
+                self._redessiner_courant()
+                return
+            self.ligne = (float(x1), float(y1), float(x2), float(y2))
+            self._mode_ligne = False
+            self._points_ligne = []
+            self.bouton_ligne.setText("Tracer la ligne")
+            self._reconstruire_ligne()
+            self._enregistrer_ligne()
+            self.label_etat.setText(
+                "Ligne tracée et mémorisée pour cette vidéo. "
+                "« Inverser le sens » si le sens compté est l'autre."
+            )
+            self._redessiner_courant()
+            return
         self.session.ajouter(self.source.index, x, y)
         self._maj_liste()
+        self._redessiner_courant()  # affiche tout de suite le repère du clic
+
+    # -- Ligne de comptage -------------------------------------------------
+
+    def _ligne_initiale(
+        self,
+    ) -> tuple[tuple[float, float, float, float], int]:
+        if not self._sans_video:
+            stockee = banc.charger_ligne(self.chemin, self._fichier_lignes)
+            if stockee is not None:
+                return stockee
+        return banc.LIGNE_REF, -1
+
+    def _reconstruire_ligne(self) -> None:
+        self._ligne = banc._ligne_de_reference(
+            Config(ligne=self.ligne, sens=self.sens)
+        )
+
+    def _enregistrer_ligne(self) -> None:
+        if self._sans_video:
+            return
+        banc.enregistrer_ligne(
+            self.chemin, self.ligne, self.sens, self._fichier_lignes
+        )
+
+    def _redessiner_courant(self) -> None:
+        img = self.source.aller_a(self.source.index)
+        if img is not None:
+            self._afficher(img)
+
+    def _demarrer_tracage_ligne(self) -> None:
+        self._pause()
+        self._mode_ligne = True
+        self._points_ligne = []
+        self.bouton_ligne.setText("Tracer la ligne… (1/2)")
+        self.label_etat.setText(
+            "Trace la ligne : clique les DEUX extrémités sur l'image "
+            "(le sens se règle ensuite avec « Inverser le sens »)."
+        )
+
+    def _inverser_sens(self) -> None:
+        self.sens = -1 if self.sens == 1 else 1
+        self._reconstruire_ligne()
+        self._enregistrer_ligne()
+        self._redessiner_courant()
 
     def _annuler(self) -> None:
         self.session.annuler()
@@ -588,6 +708,13 @@ class FenetreAnnotation(QWidget):
         self.champ_debut.setEnabled(True)
         self.champ_fin.setEnabled(True)
         self.bouton_segment_suivant.setEnabled(True)
+        # Ligne mémorisée pour CETTE vidéo (ou référence) ; tracé remis à zéro.
+        stockee = banc.charger_ligne(self.chemin, self._fichier_lignes)
+        self.ligne, self.sens = stockee if stockee else (banc.LIGNE_REF, -1)
+        self._reconstruire_ligne()
+        self._mode_ligne = False
+        self._points_ligne = []
+        self.bouton_ligne.setText("Tracer la ligne")
         self._configurer_plage(0, min(self.longueur_segment, self.nb_frames))
 
     # -- Événements Qt ------------------------------------------------------
